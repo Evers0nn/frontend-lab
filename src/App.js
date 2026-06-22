@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import './index.css'; // Importando o CSS para remover as margens
 
 const CORES = {
   roxoEscuro: "#574591",
@@ -36,7 +37,6 @@ function App() {
 
   const API_URL = "https://gest-olab.onrender.com";
 
-  // Retorna para a página 1 sempre que o usuário digitar uma nova busca ou filtro
   useEffect(() => {
     setPaginaAtual(1);
   }, [busca, filtroCategoria]);
@@ -85,9 +85,7 @@ function App() {
         const errorData = await res.json();
         alert(`Erro ao cadastrar: ${errorData.detail || "Falha no servidor"}`);
       }
-    } catch (err) {
-      alert("Erro de conexão com o servidor!");
-    }
+    } catch (err) { alert("Erro de conexão com o servidor!"); }
   };
 
   const handleExcluirItem = async (id) => {
@@ -131,25 +129,33 @@ function App() {
   // --- TELA DE LOGIN ---
   if (!user) {
     return (
-      <div style={{ backgroundColor: CORES.roxoClaro, height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column' }}>
-        <div style={{ backgroundColor: CORES.branco, padding: '40px', borderRadius: '15px', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', textAlign: 'center', width: '350px' }}>
-          <img src="/logo-territorio.png" alt="Logo Territorio" style={{ width: '150px', marginBottom: '20px' }} />
-          <h2 style={{ color: CORES.roxoEscuro }}>Controle de Materiais</h2>
-          <p style={{ color: CORES.roxoMedio, marginBottom: '20px' }}>Território do Fazer</p>
-          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <input type="text" placeholder="Usuário" style={styles.input} onChange={e => setLoginForm({...loginForm, usuario: e.target.value})} />
-            <input type="password" placeholder="Senha" style={styles.input} onChange={e => setLoginForm({...loginForm, senha: e.target.value})} />
+      <div style={{ backgroundColor: CORES.roxoClaro, height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <div style={{ backgroundColor: CORES.branco, padding: '40px', borderRadius: '15px', boxShadow: '0 4px 15px rgba(0,0,0,0.2)', textAlign: 'center', width: '350px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          
+          <img src="/logo-territorio.png" alt="Logo Territorio" style={{ width: '150px', marginBottom: '15px' }} />
+          
+          <h2 style={{ color: CORES.roxoEscuro, margin: '0 0 5px 0' }}>Controle de Materiais</h2>
+          <p style={{ color: CORES.roxoMedio, marginBottom: '25px', marginTop: 0 }}>Território do Fazer</p>
+          
+          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px', width: '100%' }}>
+            <input type="text" placeholder="Usuário" style={{...styles.input, marginBottom: 0}} onChange={e => setLoginForm({...loginForm, usuario: e.target.value})} />
+            <input type="password" placeholder="Senha" style={{...styles.input, marginBottom: 0}} onChange={e => setLoginForm({...loginForm, senha: e.target.value})} />
             <button type="submit" style={styles.btnPrincipal}>ENTRAR</button>
           </form>
+
+          {/* Logo Instituto integrada no cartão */}
+          <div style={{ marginTop: '30px', borderTop: `1px solid ${CORES.roxoClaro}`, paddingTop: '20px', width: '100%' }}>
+            <img src="/logo-instituto.png" alt="Logo Instituto" style={{ width: '110px' }} />
+          </div>
+
         </div>
-        <img src="/logo-instituto.png" alt="Logo Instituto" style={{ width: '120px', marginTop: '30px' }} />
       </div>
     );
   }
 
   // --- TELA PRINCIPAL (DASHBOARD) ---
   return (
-    <div style={{ display: 'flex', height: '100vh', fontFamily: 'Arial' }}>
+    <div style={{ display: 'flex', height: '100vh' }}>
       
       {/* MENU LATERAL */}
       <div style={{ width: '250px', backgroundColor: CORES.roxoEscuro, color: CORES.branco, display: 'flex', flexDirection: 'column', padding: '20px' }}>
@@ -264,7 +270,7 @@ function App() {
                   <label>Nome do Item</label>
                   <input type="text" required style={styles.input} value={novoItem.nome} onChange={e => setNovoItem({...novoItem, nome: e.target.value})} />
                   
-                  <label>Categoria (ex: Sensores, Microcontroladores)</label>
+                  <label>Categoria (ex: Sensores, Motores)</label>
                   <input type="text" required style={styles.input} value={novoItem.categoria} onChange={e => setNovoItem({...novoItem, categoria: e.target.value})} />
                   
                   <label>Quantidade</label>
