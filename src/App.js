@@ -37,12 +37,15 @@ function App() {
 
   const [novoItem, setNovoItem] = useState({ nome: '', categoria: '', quantidade: '', localizacao: '' });
   const [novoUsuario, setNovoUsuario] = useState({ nome: '', usuario: '', senha: '', cargo: '' });
+  
+  // Estados dos Modais (Janelas)
   const [itemEditando, setItemEditando] = useState(null);
+  const [itemParaExcluir, setItemParaExcluir] = useState(null); // NOVO: Controle da janela de exclusão
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [menuAberto, setMenuAberto] = useState(false);
 
-  // --- SISTEMA PRÓPRIO DE NOTIFICAÇÕES (Substitui o react-toastify) ---
+  // --- SISTEMA PRÓPRIO DE NOTIFICAÇÕES ---
   const [notificacao, setNotificacao] = useState({ visivel: false, texto: '', tipo: '' });
 
   const mostrarNotificacao = (texto, tipo = 'sucesso') => {
@@ -61,7 +64,6 @@ function App() {
       </div>
     );
   };
-  // ---------------------------------------------------------------------
 
   const API_URL = "https://gest-olab.onrender.com";
 
@@ -167,14 +169,17 @@ function App() {
     } catch (err) { mostrarNotificacao("Erro de conexão com o servidor!", "erro"); }
   };
 
-  const handleExcluirItem = async (id) => {
-    if (window.confirm("Tem certeza que deseja excluir este item permanentemente?")) {
-      try {
-        await fetch(`${API_URL}/estoque/${id}`, { method: 'DELETE' });
-        mostrarNotificacao("Item removido do estoque!", "sucesso");
-        fetchEstoque();
-      } catch (err) { mostrarNotificacao("Erro ao tentar excluir.", "erro"); }
+  // --- NOVA FUNÇÃO DE EXCLUSÃO (Acionada pelo nosso Modal próprio) ---
+  const confirmarExclusao = async () => {
+    if (!itemParaExcluir) return;
+    try {
+      await fetch(`${API_URL}/estoque/${itemParaExcluir.id}`, { method: 'DELETE' });
+      mostrarNotificacao("Item removido do estoque!", "sucesso");
+      fetchEstoque();
+    } catch (err) { 
+      mostrarNotificacao("Erro ao tentar excluir.", "erro"); 
     }
+    setItemParaExcluir(null); // Fecha a janela após excluir
   };
 
   const handleCadastrarUsuario = async (e) => {
@@ -308,7 +313,8 @@ function App() {
                               <td style={{ padding: '12px' }}>{i.localizacao}</td>
                               <td style={{ padding: '12px' }}>
                                 <button style={styles.btnEditar} onClick={() => setItemEditando(i)}>✏️</button>
-                                <button style={styles.btnExcluir} onClick={() => handleExcluirItem(i.id)}>🗑️</button>
+                                {/* O botão excluir agora abre o nosso modal em vez do window.confirm */}
+                                <button style={styles.btnExcluir} onClick={() => setItemParaExcluir(i)}>🗑️</button>
                               </td>
                             </tr>
                           ))
@@ -330,7 +336,7 @@ function App() {
               )}
 
               {view === 'gerenciar' && (
-                <div>
+               <div>
                   <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Adicionar Novo Material</h3>
                   <div style={styles.formCard}>
                     <form onSubmit={handleCadastrarItem}>
@@ -361,6 +367,7 @@ function App() {
             </div>
           </div>
 
+          {/* JANELA SUSPENSA (MODAL) DE EDIÇÃO */}
           {itemEditando && (
             <div style={styles.modalOverlay}>
               <div style={styles.formCard}>
@@ -378,6 +385,27 @@ function App() {
               </div>
             </div>
           )}
+
+          {/* NOVA JANELA SUSPENSA (MODAL) DE CONFIRMAÇÃO DE EXCLUSÃO */}
+          {itemParaExcluir && (
+            <div style={styles.modalOverlay}>
+              <div style={{ ...styles.formCard, textAlign: 'center', padding: '30px' }}>
+                <h3 style={{ color: '#e74c3c', marginBottom: '15px', fontSize: '22px' }}>Atenção!</h3>
+                <p style={{ color: '#333', marginBottom: '25px', fontSize: '16px', lineHeight: '1.5' }}>
+                  Tem certeza que deseja excluir o item <strong>{itemParaExcluir.nome}</strong> permanentemente do sistema? Esta ação não pode ser desfeita.
+                </p>
+                <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+                  <button onClick={confirmarExclusao} style={{ ...styles.btnPrincipal, backgroundColor: '#e74c3c', color: 'white', width: 'auto', padding: '12px 25px' }}>
+                    Sim, Excluir
+                  </button>
+                  <button onClick={() => setItemParaExcluir(null)} style={{ ...styles.btnPrincipal, backgroundColor: '#bdc3c7', color: 'black', width: 'auto', padding: '12px 25px' }}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
         </div>
       )}
     </>
