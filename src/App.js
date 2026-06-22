@@ -24,9 +24,11 @@ function App() {
   const [loginForm, setLoginForm] = useState({ usuario: '', senha: '' });
   const [itens, setItens] = useState([]);
 
-  // Estados de Busca e Filtro
+  // Estados de Busca, Filtro e Paginação
   const [busca, setBusca] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('');
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const itensPorPagina = 50;
 
   // Estados dos Formulários
   const [novoItem, setNovoItem] = useState({ nome: '', categoria: '', quantidade: '', localizacao: '' });
@@ -34,7 +36,11 @@ function App() {
 
   const API_URL = "https://gest-olab.onrender.com";
 
-  // Função para buscar os dados atualizados
+  // Retorna para a página 1 sempre que o usuário digitar uma nova busca ou filtro
+  useEffect(() => {
+    setPaginaAtual(1);
+  }, [busca, filtroCategoria]);
+
   const fetchEstoque = async () => {
     try {
       const res = await fetch(`${API_URL}/estoque`);
@@ -64,14 +70,24 @@ function App() {
 
   const handleCadastrarItem = async (e) => {
     e.preventDefault();
-    await fetch(`${API_URL}/estoque`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...novoItem, quantidade: parseInt(novoItem.quantidade) })
-    });
-    alert("Item cadastrado com sucesso!");
-    setNovoItem({ nome: '', categoria: '', quantidade: '', localizacao: '' });
-    fetchEstoque();
+    try {
+      const res = await fetch(`${API_URL}/estoque`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...novoItem, quantidade: parseInt(novoItem.quantidade) })
+      });
+      
+      if (res.ok) {
+        alert("Item cadastrado com sucesso!");
+        setNovoItem({ nome: '', categoria: '', quantidade: '', localizacao: '' });
+        fetchEstoque();
+      } else {
+        const errorData = await res.json();
+        alert(`Erro ao cadastrar: ${errorData.detail || "Falha no servidor"}`);
+      }
+    } catch (err) {
+      alert("Erro de conexão com o servidor!");
+    }
   };
 
   const handleExcluirItem = async (id) => {
@@ -92,14 +108,24 @@ function App() {
     setNovoUsuario({ nome: '', usuario: '', senha: '', cargo: '' });
   };
 
-  // Aplicação da busca e filtro
+  // --- LÓGICA DE FILTROS E PAGINAÇÃO ---
   const itensFiltrados = itens.filter(item => {
     const matchBusca = item.nome.toLowerCase().includes(busca.toLowerCase());
     const matchCategoria = filtroCategoria === '' || item.categoria === filtroCategoria;
     return matchBusca && matchCategoria;
   });
 
-  // Extracão de categorias únicas para o filtro
+  const indexOfLastItem = paginaAtual * itensPorPagina;
+  const indexOfFirstItem = indexOfLastItem - itensPorPagina;
+  const itensAtuais = itensFiltrados.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPaginas = Math.ceil(itensFiltrados.length / itensPorPagina);
+
+  const mudarPagina = (novaPagina) => {
+    if (novaPagina >= 1 && novaPagina <= totalPaginas) {
+      setPaginaAtual(novaPagina);
+    }
+  };
+
   const categoriasUnicas = [...new Set(itens.map(i => i.categoria))];
 
   // --- TELA DE LOGIN ---
@@ -156,7 +182,6 @@ function App() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <h3 style={{ color: CORES.roxoEscuro, margin: 0 }}>Estoque Atual</h3>
                 
-                {/* BARRAS DE PESQUISA E FILTRO */}
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <input 
                     type="text" 
@@ -187,8 +212,8 @@ function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {itensFiltrados.length > 0 ? (
-                    itensFiltrados.map(i => (
+                  {itensAtuais.length > 0 ? (
+                    itensAtuais.map(i => (
                       <tr key={i.id} style={{ borderBottom: '1px solid #eee', textAlign: 'center' }}>
                         <td style={{ padding: '12px' }}>{i.nome}</td>
                         <td style={{ padding: '12px' }}>{i.categoria}</td>
@@ -204,6 +229,29 @@ function App() {
                   )}
                 </tbody>
               </table>
+
+              {/* CONTROLES DE PAGINAÇÃO */}
+              {totalPaginas > 1 && (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: '20px', gap: '15px' }}>
+                  <button 
+                    onClick={() => mudarPagina(paginaAtual - 1)} 
+                    disabled={paginaAtual === 1}
+                    style={{ ...styles.btnPrincipal, width: '100px', backgroundColor: paginaAtual === 1 ? CORES.roxoClaro : CORES.roxoMedio, color: CORES.branco }}
+                  >
+                    Anterior
+                  </button>
+                  <span style={{ color: CORES.roxoEscuro, fontWeight: 'bold' }}>
+                    Página {paginaAtual} de {totalPaginas}
+                  </span>
+                  <button 
+                    onClick={() => mudarPagina(paginaAtual + 1)} 
+                    disabled={paginaAtual === totalPaginas}
+                    style={{ ...styles.btnPrincipal, width: '100px', backgroundColor: paginaAtual === totalPaginas ? CORES.roxoClaro : CORES.roxoMedio, color: CORES.branco }}
+                  >
+                    Próxima
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
