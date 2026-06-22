@@ -3,6 +3,8 @@ import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import 'react-toastify/dist/ReactToastify.css';
+
 import './index.css';
 
 const CORES = {
