@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
-import { ToastContainer, toast } from 'react-toastify';
-
 import './index.css';
 
 const CORES = {
@@ -37,14 +35,33 @@ function App() {
   const [paginaAtual, setPaginaAtual] = useState(1);
   const itensPorPagina = 50;
 
-  // Estados dos Formulários e Interação
   const [novoItem, setNovoItem] = useState({ nome: '', categoria: '', quantidade: '', localizacao: '' });
   const [novoUsuario, setNovoUsuario] = useState({ nome: '', usuario: '', senha: '', cargo: '' });
   const [itemEditando, setItemEditando] = useState(null);
 
-  // Estados para Responsividade (Mobile)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [menuAberto, setMenuAberto] = useState(false);
+
+  // --- SISTEMA PRÓPRIO DE NOTIFICAÇÕES (Substitui o react-toastify) ---
+  const [notificacao, setNotificacao] = useState({ visivel: false, texto: '', tipo: '' });
+
+  const mostrarNotificacao = (texto, tipo = 'sucesso') => {
+    setNotificacao({ visivel: true, texto, tipo });
+    setTimeout(() => {
+      setNotificacao({ visivel: false, texto: '', tipo: '' });
+    }, 3000);
+  };
+
+  const NotificacaoUI = () => {
+    if (!notificacao.visivel) return null;
+    const bg = notificacao.tipo === 'sucesso' ? '#2ecc71' : notificacao.tipo === 'erro' ? '#e74c3c' : '#3498db';
+    return (
+      <div style={{ position: 'fixed', top: '20px', right: '20px', backgroundColor: bg, color: 'white', padding: '15px 25px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 9999, fontWeight: 'bold', fontSize: '15px', transition: 'all 0.3s ease' }}>
+        {notificacao.texto}
+      </div>
+    );
+  };
+  // ---------------------------------------------------------------------
 
   const API_URL = "https://gest-olab.onrender.com";
 
@@ -54,9 +71,7 @@ function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  useEffect(() => {
-    setPaginaAtual(1);
-  }, [busca, filtroCategoria]);
+  useEffect(() => { setPaginaAtual(1); }, [busca, filtroCategoria]);
 
   const fetchEstoque = async () => {
     try {
@@ -66,9 +81,7 @@ function App() {
     } catch (err) { console.error("Erro ao carregar estoque."); }
   };
 
-  useEffect(() => {
-    if (user) fetchEstoque();
-  }, [user, view]);
+  useEffect(() => { if (user) fetchEstoque(); }, [user, view]);
 
   const mudarView = (novaView) => {
     setView(novaView);
@@ -76,7 +89,7 @@ function App() {
   };
 
   const handleBaixarPDF = () => {
-    toast.info("Gerando relatório em PDF..."); 
+    mostrarNotificacao("Gerando relatório em PDF...", "info"); 
     const doc = new jsPDF();
     doc.setFont("Arial", "bold");
     doc.setFontSize(18);
@@ -99,44 +112,29 @@ function App() {
     const linhas = itensFiltrados.map(i => [i.id, i.nome, i.categoria, i.quantidade, i.localizacao || "-"]);
     
     doc.autoTable({
-      startY: 40,
-      head: [colunas],
-      body: linhas,
+      startY: 40, head: [colunas], body: linhas,
       headStyles: { fillColor: [87, 69, 145], textColor: [255, 255, 255], halign: 'center', fontStyle: 'bold' },
-      bodyStyles: { halign: 'center' },
-      columnStyles: { 1: { halign: 'left' } },
-      theme: 'striped',
-      margin: { top: 40, bottom: 20 }
+      bodyStyles: { halign: 'center' }, columnStyles: { 1: { halign: 'left' } },
+      theme: 'striped', margin: { top: 40, bottom: 20 }
     });
     doc.save(`relatorio_estoque_${new Date().toISOString().slice(0,10)}.pdf`);
-    toast.success("Download concluído!");
+    mostrarNotificacao("Download concluído!", "sucesso");
   };
 
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch(`${API_URL}/login`, { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify(loginForm) 
-      });
-
-      // Blindagem contra erro 502 do servidor dormindo
-      if (!res.ok && res.status !== 401) {
-        throw new Error("Erro no servidor");
-      }
-
-      const data = await res.json();
+      const res = await fetch(`${API_URL}/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(loginForm) });
+      if (!res.ok && res.status !== 401) throw new Error("Erro no servidor");
       
+      const data = await res.json();
       if (data.status === "sucesso") {
         setUser(data.usuario);
-        toast.success(`Bem-vindo(a), ${data.usuario.nome}!`);
+        mostrarNotificacao(`Bem-vindo(a), ${data.usuario.nome}!`, "sucesso");
       } else {
-        toast.error("Usuário ou senha incorretos!");
+        mostrarNotificacao("Usuário ou senha incorretos!", "erro");
       }
-    } catch (err) { 
-      toast.error("Servidor iniciando. Aguarde uns segundos e tente de novo!"); 
-    }
+    } catch (err) { mostrarNotificacao("Servidor iniciando. Aguarde uns segundos e tente de novo!", "erro"); }
   };
 
   const handleCadastrarItem = async (e) => {
@@ -144,14 +142,14 @@ function App() {
     try {
       const res = await fetch(`${API_URL}/estoque`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...novoItem, quantidade: parseInt(novoItem.quantidade) }) });
       if (res.ok) {
-        toast.success("Item cadastrado com sucesso!");
+        mostrarNotificacao("Item cadastrado com sucesso!", "sucesso");
         setNovoItem({ nome: '', categoria: '', quantidade: '', localizacao: '' });
         fetchEstoque();
       } else {
         const errorData = await res.json();
-        toast.error(`Erro ao cadastrar: ${errorData.detail || "Falha no servidor"}`);
+        mostrarNotificacao(`Erro ao cadastrar: ${errorData.detail}`, "erro");
       }
-    } catch (err) { toast.error("Erro de conexão com o servidor!"); }
+    } catch (err) { mostrarNotificacao("Erro de conexão com o servidor!", "erro"); }
   };
 
   const handleSalvarEdicao = async (e) => {
@@ -159,25 +157,23 @@ function App() {
     try {
       const res = await fetch(`${API_URL}/estoque/${itemEditando.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome: itemEditando.nome, categoria: itemEditando.categoria, quantidade: parseInt(itemEditando.quantidade), localizacao: itemEditando.localizacao }) });
       if (res.ok) {
-        toast.success("Material atualizado com sucesso!");
+        mostrarNotificacao("Material atualizado com sucesso!", "sucesso");
         setItemEditando(null);
         fetchEstoque();
       } else {
         const errorData = await res.json();
-        toast.error(`Erro ao atualizar: ${errorData.detail || "Falha no servidor"}`);
+        mostrarNotificacao(`Erro ao atualizar: ${errorData.detail}`, "erro");
       }
-    } catch (err) { toast.error("Erro de conexão com o servidor!"); }
+    } catch (err) { mostrarNotificacao("Erro de conexão com o servidor!", "erro"); }
   };
 
   const handleExcluirItem = async (id) => {
     if (window.confirm("Tem certeza que deseja excluir este item permanentemente?")) {
       try {
         await fetch(`${API_URL}/estoque/${id}`, { method: 'DELETE' });
-        toast.success("Item removido do estoque!");
+        mostrarNotificacao("Item removido do estoque!", "sucesso");
         fetchEstoque();
-      } catch (err) {
-        toast.error("Erro ao tentar excluir.");
-      }
+      } catch (err) { mostrarNotificacao("Erro ao tentar excluir.", "erro"); }
     }
   };
 
@@ -185,11 +181,9 @@ function App() {
     e.preventDefault();
     try {
       await fetch(`${API_URL}/usuarios`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(novoUsuario) });
-      toast.success("Novo usuário registrado com sucesso!");
+      mostrarNotificacao("Novo usuário registrado com sucesso!", "sucesso");
       setNovoUsuario({ nome: '', usuario: '', senha: '', cargo: '' });
-    } catch (err) {
-      toast.error("Erro ao registrar o usuário.");
-    }
+    } catch (err) { mostrarNotificacao("Erro ao registrar o usuário.", "erro"); }
   };
 
   const itensFiltrados = itens.filter(item => {
@@ -211,14 +205,9 @@ function App() {
 
   return (
     <>
-      {/* A MÁGICA ACONTECE AQUI:
-        O ToastContainer fica isolado no topo, carregando uma única vez
-        e servindo para todas as telas sem conflitos!
-      */}
-      <ToastContainer position="top-right" autoClose={3000} theme="colored" />
+      <NotificacaoUI />
 
       {!user ? (
-        // --- TELA DE LOGIN ---
         <div style={{ backgroundColor: CORES.roxoClaro, height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', boxSizing: 'border-box' }}>
           <div style={{ backgroundColor: CORES.branco, padding: '40px 30px', borderRadius: '15px', boxShadow: '0 4px 15px rgba(0,0,0,0.2)', textAlign: 'center', width: '100%', maxWidth: '380px', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}>
             <img src="/logo-territorio.png" alt="Logo Territorio" style={{ width: '130px', marginBottom: '15px' }} />
@@ -235,7 +224,6 @@ function App() {
           </div>
         </div>
       ) : (
-        // --- TELA PRINCIPAL ---
         <div style={{ display: 'flex', height: '100vh', width: '100%', overflow: 'hidden' }}>
           
           {isMobile && menuAberto && (
@@ -253,7 +241,7 @@ function App() {
             <div style={{ marginTop: 'auto' }}>
               <p style={{ fontWeight: 'bold' }}>Olá, {user.nome}</p>
               <p style={{ fontSize: '12px', color: CORES.roxoClaro }}>{user.cargo || 'Administrador'}</p>
-              <button onClick={() => { setUser(null); toast.info("Você saiu do sistema."); }} style={{ ...styles.navBtn, backgroundColor: CORES.laranja, color: 'black', width: '100%', marginTop: '10px' }}>Sair</button>
+              <button onClick={() => { setUser(null); mostrarNotificacao("Você saiu do sistema.", "info"); }} style={{ ...styles.navBtn, backgroundColor: CORES.laranja, color: 'black', width: '100%', marginTop: '10px' }}>Sair</button>
             </div>
           </div>
 
