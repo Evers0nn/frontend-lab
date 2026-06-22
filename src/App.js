@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 import './index.css';
 
 const CORES = {
@@ -55,6 +57,60 @@ function App() {
   useEffect(() => {
     if (user) fetchEstoque();
   }, [user, view]);
+
+  // --- FUNÇÃO PARA GERAR O PDF ---
+  const handleBaixarPDF = () => {
+    const doc = new jsPDF();
+    
+    // Configuração do Cabeçalho do PDF
+    doc.setFont("Arial", "bold");
+    doc.setFontSize(18);
+    doc.setTextColor(87, 69, 145); // Roxo Escuro (#574591)
+    doc.text("Controle de Materiais - Território do Fazer", 14, 20);
+    
+    doc.setFont("Arial", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(118, 106, 167); // Roxo Médio (#766aa7)
+    doc.text(`Relatório de Estoque Oficial — Emitido em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 27);
+    
+    // Informação dos Filtros Aplicados no PDF
+    const txtFiltro = filtroCategoria ? `Categoria: ${filtroCategoria}` : "Todas as Categorias";
+    const txtBusca = busca ? `Busca: "${busca}"` : "Nenhum termo";
+    doc.setFontSize(9);
+    doc.text(`Filtros Ativos -> ${txtFiltro} | Pesquisa: ${txtBusca}`, 14, 33);
+
+    // Linha divisória decorativa (Laranja #f4a521)
+    doc.setDrawColor(244, 165, 33);
+    doc.setLineWidth(1);
+    doc.line(14, 36, 196, 36);
+    
+    // Mapeando as colunas e linhas baseadas nos ITENS FILTRADOS
+    const colunas = ["ID", "Nome do Material", "Categoria", "Qtd", "Localização"];
+    const linhas = itensFiltrados.map(i => [
+      i.id, 
+      i.nome, 
+      i.categoria, 
+      i.quantidade, 
+      i.localizacao || "Não informada"
+    ]);
+    
+    // Criando a tabela estilizada dentro do PDF
+    doc.autoTable({
+      startY: 40,
+      head: [colunas],
+      body: linhas,
+      headStyles: { fillColor: [87, 69, 145], textColor: [255, 255, 255], halign: 'center', fontStyle: 'bold' },
+      bodyStyles: { halign: 'center' },
+      columnStyles: {
+        1: { halign: 'left' } // Alinha o nome do item à esquerda para ficar mais legível
+      },
+      theme: 'striped',
+      margin: { top: 40, bottom: 20 }
+    });
+    
+    // Faz o download do arquivo no navegador do usuário
+    doc.save(`relatorio_estoque_${new Date().toISOString().slice(0,10)}.pdf`);
+  };
 
   // --- FUNÇÕES DE AÇÃO ---
   const handleLogin = async (e) => {
@@ -175,7 +231,7 @@ function App() {
     );
   }
 
-  // --- TELA PRINCIPAL ---
+  // --- TELA PRINCIPAL (DASHBOARD) ---
   return (
     <div style={{ display: 'flex', height: '100vh' }}>
       {/* MENU LATERAL */}
@@ -199,32 +255,39 @@ function App() {
           <img src="/logo-instituto.png" alt="Logo Instituto" style={{ height: '40px' }} />
         </div>
 
-        {/* CONTEÚDO */}
+        {/* CONTEÚDO DINÂMICO */}
         <div style={{ padding: '30px', overflowY: 'auto', height: 'calc(100vh - 80px)' }}>
           {view === 'estoque' && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <h3 style={{ color: CORES.roxoEscuro, margin: 0 }}>Estoque Atual</h3>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <input type="text" placeholder="Pesquisar por nome..." style={{...styles.input, marginBottom: 0, width: '250px'}} value={busca} onChange={(e) => setBusca(e.target.value)} />
-                  <select style={{...styles.input, marginBottom: 0, width: '200px'}} value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
+                
+                {/* FILTROS E BOTÃO DO PDF */}
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <input type="text" placeholder="Pesquisar por nome..." style={{...styles.input, marginBottom: 0, width: '220px'}} value={busca} onChange={(e) => setBusca(e.target.value)} />
+                  <select style={{...styles.input, marginBottom: 0, width: '180px'}} value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
                     <option value="">Todas as Categorias</option>
                     {categoriasUnicas.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                   </select>
+                  {/* NOVO BOTÃO DE EXPORTAÇÃO */}
+                  <button onClick={handleBaixarPDF} style={{...styles.btnPrincipal, width: 'auto', backgroundColor: CORES.roxoMedio, color: 'white', display: 'flex', alignItems: 'center', gap: '5px'}}>
+                    📄 PDF
+                  </button>
                 </div>
               </div>
 
               <table style={styles.table}>
                 <thead>
                   <tr style={{ backgroundColor: CORES.roxoMedio, color: 'white' }}>
-                    <th style={{ padding: '12px' }}>Item</th><th style={{ padding: '12px' }}>Categoria</th><th style={{ padding: '12px' }}>Qtd</th><th style={{ padding: '12px' }}>Localização</th><th style={{ padding: '12px' }}>Ações</th>
+                    <th style={{ padding: '12px' }}>ID</th><th style={{ padding: '12px' }}>Item</th><th style={{ padding: '12px' }}>Categoria</th><th style={{ padding: '12px' }}>Qtd</th><th style={{ padding: '12px' }}>Localização</th><th style={{ padding: '12px' }}>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {itensAtuais.length > 0 ? (
                     itensAtuais.map(i => (
                       <tr key={i.id} style={{ borderBottom: '1px solid #eee', textAlign: 'center' }}>
-                        <td style={{ padding: '12px' }}>{i.nome}</td>
+                        <td style={{ padding: '12px' }}>{i.id}</td>
+                        <td style={{ padding: '12px', textAlign: 'left' }}>{i.nome}</td>
                         <td style={{ padding: '12px' }}>{i.categoria}</td>
                         <td style={{ padding: '12px' }}>{i.quantidade}</td>
                         <td style={{ padding: '12px' }}>{i.localizacao}</td>
@@ -235,13 +298,13 @@ function App() {
                       </tr>
                     ))
                   ) : (
-                    <tr><td colSpan="5" style={{ padding: '20px', textAlign: 'center' }}>Nenhum item encontrado.</td></tr>
+                    <tr><td colSpan="6" style={{ padding: '20px', textAlign: 'center' }}>Nenhum item encontrado.</td></tr>
                   )}
                 </tbody>
               </table>
 
               {totalPaginas > 1 && (
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: '20px', gap: '15px' }}>
+                <div style={{ display: 'flex', center: 'center', alignItems: 'center', marginTop: '20px', gap: '15px', justifyContent: 'center' }}>
                   <button onClick={() => mudarPagina(paginaAtual - 1)} disabled={paginaAtual === 1} style={{ ...styles.btnPrincipal, width: '100px', backgroundColor: paginaAtual === 1 ? CORES.roxoClaro : CORES.roxoMedio, color: CORES.branco }}>Anterior</button>
                   <span style={{ color: CORES.roxoEscuro, fontWeight: 'bold' }}>Página {paginaAtual} de {totalPaginas}</span>
                   <button onClick={() => mudarPagina(paginaAtual + 1)} disabled={paginaAtual === totalPaginas} style={{ ...styles.btnPrincipal, width: '100px', backgroundColor: paginaAtual === totalPaginas ? CORES.roxoClaro : CORES.roxoMedio, color: CORES.branco }}>Próxima</button>
@@ -288,18 +351,10 @@ function App() {
           <div style={styles.formCard}>
             <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Editar Material</h3>
             <form onSubmit={handleSalvarEdicao}>
-              <label>Nome do Item</label>
-              <input type="text" required style={styles.input} value={itemEditando.nome} onChange={e => setItemEditando({...itemEditando, nome: e.target.value})} />
-              
-              <label>Categoria</label>
-              <input type="text" required style={styles.input} value={itemEditando.categoria} onChange={e => setItemEditando({...itemEditando, categoria: e.target.value})} />
-              
-              <label>Quantidade</label>
-              <input type="number" required min="0" style={styles.input} value={itemEditando.quantidade} onChange={e => setItemEditando({...itemEditando, quantidade: e.target.value})} />
-              
-              <label>Localização</label>
-              <input type="text" required style={styles.input} value={itemEditando.localizacao} onChange={e => setItemEditando({...itemEditando, localizacao: e.target.value})} />
-              
+              <label>Nome do Item</label><input type="text" required style={styles.input} value={itemEditando.nome} onChange={e => setItemEditando({...itemEditando, nome: e.target.value})} />
+              <label>Categoria</label><input type="text" required style={styles.input} value={itemEditando.categoria} onChange={e => setItemEditando({...itemEditando, categoria: e.target.value})} />
+              <label>Quantidade</label><input type="number" required min="0" style={styles.input} value={itemEditando.quantidade} onChange={e => setItemEditando({...itemEditando, quantidade: e.target.value})} />
+              <label>Localização</label><input type="text" required style={styles.input} value={itemEditando.localizacao} onChange={e => setItemEditando({...itemEditando, localizacao: e.target.value})} />
               <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
                 <button type="submit" style={styles.btnPrincipal}>Salvar Alterações</button>
                 <button type="button" style={{...styles.btnPrincipal, backgroundColor: '#bdc3c7', color: 'black'}} onClick={() => setItemEditando(null)}>Cancelar</button>
