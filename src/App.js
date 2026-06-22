@@ -226,17 +226,22 @@ function App() {
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#f9f9f9', overflow: 'hidden', width: '100%' }}>
         
-        <div style={{ height: '80px', minHeight: '80px', backgroundColor: CORES.branco, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: isMobile ? '0 15px' : '0 30px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
+        {/* CABEÇALHO ATUALIZADO (TITULO ENTRE AS LOGOS NO MOBILE) */}
+        <div style={{ height: '80px', minHeight: '80px', backgroundColor: CORES.branco, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: isMobile ? '0 10px' : '0 30px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
           <div style={{ display: 'flex', alignItems: 'center' }}>
             {isMobile && (
-              <button onClick={() => setMenuAberto(true)} style={{ background: 'transparent', border: 'none', fontSize: '26px', cursor: 'pointer', marginRight: '15px', color: CORES.roxoEscuro }}>
+              <button onClick={() => setMenuAberto(true)} style={{ background: 'transparent', border: 'none', fontSize: '26px', cursor: 'pointer', marginRight: '10px', color: CORES.roxoEscuro }}>
                 ☰
               </button>
             )}
-            <img src="/logo-territorio.png" alt="Logo Território" style={{ height: isMobile ? '40px' : '50px' }} />
+            <img src="/logo-territorio.png" alt="Logo Território" style={{ height: isMobile ? '35px' : '50px' }} />
           </div>
-          {!isMobile && <h2 style={{ color: CORES.roxoEscuro, fontSize: '20px' }}>Controle de Materiais</h2>}
-          <img src="/logo-instituto.png" alt="Logo Instituto" style={{ height: isMobile ? '30px' : '40px' }} />
+          
+          <h2 style={{ color: CORES.roxoEscuro, fontSize: isMobile ? '14px' : '20px', textAlign: 'center', margin: '0 5px', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            Controle de Materiais
+          </h2>
+
+          <img src="/logo-instituto.png" alt="Logo Instituto" style={{ height: isMobile ? '25px' : '40px' }} />
         </div>
 
         <div style={{ padding: isMobile ? '15px' : '30px', overflowY: 'auto', height: 'calc(100vh - 80px)', boxSizing: 'border-box' }}>
@@ -249,7 +254,6 @@ function App() {
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
                   <input type="text" placeholder="Pesquisar..." style={{...styles.input, marginBottom: 0, width: isMobile ? '100%' : '220px', flex: isMobile ? '1 1 100%' : 'none'}} value={busca} onChange={(e) => setBusca(e.target.value)} />
                   
-                  {/* AJUSTE NA LARGURA DO SELECT PARA NÃO CORTAR O TEXTO */}
                   <select style={{...styles.input, marginBottom: 0, width: isMobile ? 'calc(100% - 110px)' : '280px', flex: isMobile ? 1 : 'none', textOverflow: 'ellipsis'}} value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
                     <option value="">Todas as Categorias</option>
                     {categoriasUnicas.map(cat => <option key={cat} value={cat}>{cat}</option>)}
