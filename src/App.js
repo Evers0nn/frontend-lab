@@ -40,7 +40,7 @@ function App() {
   
   // Estados dos Modais (Janelas)
   const [itemEditando, setItemEditando] = useState(null);
-  const [itemParaExcluir, setItemParaExcluir] = useState(null); // NOVO: Controle da janela de exclusão
+  const [itemParaExcluir, setItemParaExcluir] = useState(null);
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [menuAberto, setMenuAberto] = useState(false);
@@ -142,7 +142,7 @@ function App() {
   const handleCadastrarItem = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch(`${API_URL}/estoque`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...novoItem, quantidade: parseInt(novoItem.quantidade) }) });
+      const res = await fetch(`${API_URL}/estoque`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...novoItem, quantity: parseInt(novoItem.quantidade) }) });
       if (res.ok) {
         mostrarNotificacao("Item cadastrado com sucesso!", "sucesso");
         setNovoItem({ nome: '', categoria: '', quantidade: '', localizacao: '' });
@@ -169,17 +169,14 @@ function App() {
     } catch (err) { mostrarNotificacao("Erro de conexão com o servidor!", "erro"); }
   };
 
-  // --- NOVA FUNÇÃO DE EXCLUSÃO (Acionada pelo nosso Modal próprio) ---
   const confirmarExclusao = async () => {
     if (!itemParaExcluir) return;
     try {
       await fetch(`${API_URL}/estoque/${itemParaExcluir.id}`, { method: 'DELETE' });
       mostrarNotificacao("Item removido do estoque!", "sucesso");
       fetchEstoque();
-    } catch (err) { 
-      mostrarNotificacao("Erro ao tentar excluir.", "erro"); 
-    }
-    setItemParaExcluir(null); // Fecha a janela após excluir
+    } catch (err) { mostrarNotificacao("Erro ao tentar excluir.", "erro"); }
+    setItemParaExcluir(null);
   };
 
   const handleCadastrarUsuario = async (e) => {
@@ -313,7 +310,6 @@ function App() {
                               <td style={{ padding: '12px' }}>{i.localizacao}</td>
                               <td style={{ padding: '12px' }}>
                                 <button style={styles.btnEditar} onClick={() => setItemEditando(i)}>✏️</button>
-                                {/* O botão excluir agora abre o nosso modal em vez do window.confirm */}
                                 <button style={styles.btnExcluir} onClick={() => setItemParaExcluir(i)}>🗑️</button>
                               </td>
                             </tr>
@@ -336,12 +332,19 @@ function App() {
               )}
 
               {view === 'gerenciar' && (
-               <div>
+                <div>
                   <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Adicionar Novo Material</h3>
                   <div style={styles.formCard}>
                     <form onSubmit={handleCadastrarItem}>
                       <label>Nome do Item</label><input type="text" required style={styles.input} value={novoItem.nome} onChange={e => setNovoItem({...novoItem, nome: e.target.value})} />
-                      <label>Categoria</label><input type="text" required style={styles.input} value={novoItem.categoria} onChange={e => setNovoItem({...novoItem, categoria: e.target.value})} />
+                      
+                      {/* LÓGICA DE AUTOCOMPLETAR CATEGORIAS COM DATALIST */}
+                      <label>Categoria</label>
+                      <input type="text" required style={styles.input} list="categorias-novas-list" value={novoItem.categoria} onChange={e => setNovoItem({...novoItem, categoria: e.target.value})} />
+                      <datalist id="categorias-novas-list">
+                        {categoriasUnicas.map(cat => <option key={cat} value={cat} />)}
+                      </datalist>
+
                       <label>Quantidade</label><input type="number" required min="0" style={styles.input} value={novoItem.quantidade} onChange={e => setNovoItem({...novoItem, quantidade: e.target.value})} />
                       <label>Localização</label><input type="text" required style={styles.input} value={novoItem.localizacao} onChange={e => setNovoItem({...novoItem, localizacao: e.target.value})} />
                       <button type="submit" style={{...styles.btnPrincipal, marginTop: '10px'}}>Salvar no Estoque</button>
@@ -374,7 +377,14 @@ function App() {
                 <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Editar Material</h3>
                 <form onSubmit={handleSalvarEdicao}>
                   <label>Nome do Item</label><input type="text" required style={styles.input} value={itemEditando.nome} onChange={e => setItemEditando({...itemEditando, nome: e.target.value})} />
-                  <label>Categoria</label><input type="text" required style={styles.input} value={itemEditando.categoria} onChange={e => setItemEditando({...itemEditando, categoria: e.target.value})} />
+                  
+                  {/* LÓGICA DE AUTOCOMPLETAR CATEGORIAS NO MODAL DE EDIÇÃO */}
+                  <label>Categoria</label>
+                  <input type="text" required style={styles.input} list="categorias-editar-list" value={itemEditando.categoria} onChange={e => setItemEditando({...itemEditando, categoria: e.target.value})} />
+                  <datalist id="categorias-editar-list">
+                    {categoriasUnicas.map(cat => <option key={cat} value={cat} />)}
+                  </datalist>
+
                   <label>Quantidade</label><input type="number" required min="0" style={styles.input} value={itemEditando.quantidade} onChange={e => setItemEditando({...itemEditando, quantidade: e.target.value})} />
                   <label>Localização</label><input type="text" required style={styles.input} value={itemEditando.localizacao} onChange={e => setItemEditando({...itemEditando, localizacao: e.target.value})} />
                   <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
@@ -386,7 +396,7 @@ function App() {
             </div>
           )}
 
-          {/* NOVA JANELA SUSPENSA (MODAL) DE CONFIRMAÇÃO DE EXCLUSÃO */}
+          {/* JANELA SUSPENSA (MODAL) DE CONFIRMAÇÃO DE EXCLUSÃO */}
           {itemParaExcluir && (
             <div style={styles.modalOverlay}>
               <div style={{ ...styles.formCard, textAlign: 'center', padding: '30px' }}>
