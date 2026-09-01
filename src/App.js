@@ -30,9 +30,9 @@ function App() {
   const [token, setToken] = useState(null);
   const [view, setView] = useState('estoque');
   
-  const [modoLogin, setModoLogin] = useState(true);
   const [loginForm, setLoginForm] = useState({ usuario: '', senha: '' });
-  const [novoUsuario, setNovoUsuario] = useState({ nome: '', usuario: '', senha: '', cargo: '', departamento_id: '1' });
+  // O departamento agora é guardado como texto livre
+  const [novoUsuario, setNovoUsuario] = useState({ nome: '', usuario: '', senha: '', cargo: '', departamento_nome: '', nivel_acesso: 'usuario_dept' });
   
   const [itens, setItens] = useState([]);
   const [saidas, setSaidas] = useState([]);
@@ -59,7 +59,6 @@ function App() {
 
   const [notificacao, setNotificacao] = useState({ visivel: false, texto: '', tipo: '' });
 
-  // CORREÇÃO: Escudo contra o erro [object Object]. Agora traduz objetos para texto.
   const mostrarNotificacao = (texto, tipo = 'sucesso') => {
     const msgFormatada = typeof texto === 'string' ? texto : JSON.stringify(texto);
     setNotificacao({ visivel: true, texto: msgFormatada, tipo });
@@ -128,61 +127,28 @@ function App() {
   };
 
   const handleBaixarPDFEstoque = () => {
-    mostrarNotificacao("Gerando relatório de estoque...", "info"); 
+    mostrarNotificacao("Gerando relatório...", "info"); 
     const doc = new jsPDF();
-    doc.setFont("Arial", "bold");
-    doc.setFontSize(18);
-    doc.setTextColor(87, 69, 145);
+    doc.setFont("Arial", "bold"); doc.setFontSize(18); doc.setTextColor(87, 69, 145);
     doc.text("Controle de Materiais - Território do Fazer", 14, 20);
-    doc.setFont("Arial", "normal");
-    doc.setFontSize(10);
-    doc.setTextColor(118, 106, 167);
+    doc.setFontSize(10); doc.setTextColor(118, 106, 167);
     doc.text(`Relatório de Estoque Oficial — Emitido em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 27);
     
-    const txtFiltro = filtroCategoria ? `Categoria: ${filtroCategoria}` : "Todas as Categorias";
-    doc.setFontSize(9);
-    doc.text(`Filtros Ativos -> ${txtFiltro}`, 14, 33);
-    doc.setDrawColor(244, 165, 33);
-    doc.setLineWidth(1);
-    doc.line(14, 36, 196, 36);
-    
-    const colunas = ["ID", "Nome do Material", "Categoria", "Qtd", "Localização"];
-    const linhas = itensFiltrados.map(i => [i.id, i.nome, i.categoria, i.quantidade, i.localizacao || "-"]);
-    
-    doc.autoTable({ startY: 40, head: [colunas], body: linhas, headStyles: { fillColor: [87, 69, 145] } });
-    doc.save(`relatorio_estoque_${new Date().toISOString().slice(0,10)}.pdf`);
+    doc.autoTable({ startY: 35, head: [["ID", "Material", "Categoria", "Qtd", "Local"]], body: itensFiltrados.map(i => [i.id, i.nome, i.categoria, i.quantidade, i.localizacao || "-"]), headStyles: { fillColor: [87, 69, 145] } });
+    doc.save(`estoque_${new Date().toISOString().slice(0,10)}.pdf`);
     mostrarNotificacao("Download concluído!", "sucesso");
   };
 
   const handleBaixarPDFSaidas = () => {
-    mostrarNotificacao("Gerando relatório de saídas...", "info"); 
+    mostrarNotificacao("Gerando relatório...", "info"); 
     const doc = new jsPDF();
-    doc.setFont("Arial", "bold");
-    doc.setFontSize(18);
-    doc.setTextColor(87, 69, 145);
+    doc.setFont("Arial", "bold"); doc.setFontSize(18); doc.setTextColor(87, 69, 145);
     doc.text("Histórico de Saídas - Território do Fazer", 14, 20);
-    doc.setFont("Arial", "normal");
-    doc.setFontSize(10);
-    doc.setTextColor(118, 106, 167);
+    doc.setFontSize(10); doc.setTextColor(118, 106, 167);
     doc.text(`Emitido em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 27);
     
-    const txtFiltro = filtroProjeto ? `Projeto: ${filtroProjeto}` : "Todos os Projetos";
-    doc.setFontSize(9);
-    doc.text(`Filtros Ativos -> ${txtFiltro}`, 14, 33);
-    doc.setDrawColor(244, 165, 33);
-    doc.setLineWidth(1);
-    doc.line(14, 36, 196, 36);
-    
-    const colunas = ["Item", "Projeto", "Qtd", "Data"];
-    const linhas = saidasFiltradas.map(s => [
-      obterNomeItem(s.item_id), 
-      s.projeto, 
-      s.quantidade, 
-      s.data ? new Date(s.data).toLocaleDateString('pt-BR') : 'Recente'
-    ]);
-    
-    doc.autoTable({ startY: 40, head: [colunas], body: linhas, headStyles: { fillColor: [244, 165, 33], textColor: [0,0,0] } });
-    doc.save(`historico_saidas_${new Date().toISOString().slice(0,10)}.pdf`);
+    doc.autoTable({ startY: 35, head: [["Item", "Projeto", "Qtd", "Data"]], body: saidasFiltradas.map(s => [obterNomeItem(s.item_id), s.projeto, s.quantidade, s.data ? new Date(s.data).toLocaleDateString('pt-BR') : '-']), headStyles: { fillColor: [244, 165, 33], textColor: [0,0,0] } });
+    doc.save(`saidas_${new Date().toISOString().slice(0,10)}.pdf`);
     mostrarNotificacao("Download concluído!", "sucesso");
   };
 
@@ -198,21 +164,21 @@ function App() {
       } else {
         mostrarNotificacao(data.detail || "Usuário ou senha incorretos!", "erro");
       }
-    } catch (err) { mostrarNotificacao("Erro de conexão. A API está rodando?", "erro"); }
+    } catch (err) { mostrarNotificacao("Erro de conexão com o servidor.", "erro"); }
   };
 
   const handleCadastrarUsuario = async (e) => {
     e.preventDefault();
+    if(!novoUsuario.departamento_nome.trim()) return mostrarNotificacao("Informe o nome do departamento", "erro");
+    
     try {
-      // CORREÇÃO: || 1 adicionado. Se o usuário esquecer o departamento, não quebra a API, vai pro dept 1.
-      const payload = { ...novoUsuario, departamento_id: parseInt(novoUsuario.departamento_id) || 1 };
-      const res = await fetch(`${API_URL}/usuarios`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const res = await fetch(`${API_URL}/usuarios`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(novoUsuario) });
+      const data = await res.json();
       if (res.ok) {
-        mostrarNotificacao("Conta criada com sucesso! Faça login.", "sucesso");
-        setNovoUsuario({ nome: '', usuario: '', senha: '', cargo: '', departamento_id: '1' });
-        setModoLogin(true);
+        mostrarNotificacao(data.mensagem || "Usuário criado com sucesso!", "sucesso");
+        setNovoUsuario({ nome: '', usuario: '', senha: '', cargo: '', departamento_nome: '', nivel_acesso: 'usuario_dept' });
+        carregarDados(); // Recarrega para atualizar a lista de departamentos se um novo foi criado
       } else {
-        const data = await res.json();
         mostrarNotificacao(data.detail, "erro");
       }
     } catch (err) { mostrarNotificacao("Erro ao registrar.", "erro"); }
@@ -224,12 +190,11 @@ function App() {
       const payload = { ...novoItem, quantidade: parseInt(novoItem.quantidade), quantidade_minima: parseInt(novoItem.quantidade_minima) };
       const res = await fetch(`${API_URL}/estoque`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(payload) });
       if (res.ok) {
-        mostrarNotificacao("Item cadastrado com sucesso!", "sucesso");
+        mostrarNotificacao("Item cadastrado!", "sucesso");
         setNovoItem({ nome: '', categoria: '', quantidade: '', quantidade_minima: '0', localizacao: '' });
         carregarDados();
       } else {
-        const err = await res.json();
-        mostrarNotificacao(err.detail || "Erro ao cadastrar.", "erro");
+        mostrarNotificacao("Erro ao cadastrar.", "erro");
       }
     } catch (err) { mostrarNotificacao("Erro de conexão!", "erro"); }
   };
@@ -237,19 +202,11 @@ function App() {
   const handleCadastrarSaida = async (e) => {
     e.preventDefault();
     const itemSelecionado = itens.find(i => i.id.toString() === novaSaida.item_id);
-    if (!itemSelecionado) return mostrarNotificacao("Selecione um item válido.", "erro");
-    if (parseInt(novaSaida.quantidade) > itemSelecionado.quantidade) {
-      return mostrarNotificacao(`Estoque insuficiente! Temos apenas ${itemSelecionado.quantidade}.`, "erro");
-    }
+    if (!itemSelecionado) return mostrarNotificacao("Selecione um item.", "erro");
+    if (parseInt(novaSaida.quantidade) > itemSelecionado.quantidade) return mostrarNotificacao("Estoque insuficiente.", "erro");
 
     try {
-      const payload = {
-        item_id: parseInt(novaSaida.item_id),
-        quantidade: parseInt(novaSaida.quantidade),
-        projeto: novaSaida.projeto,
-        tipo: 'saida',
-        data: new Date().toISOString()
-      };
+      const payload = { item_id: parseInt(novaSaida.item_id), quantidade: parseInt(novaSaida.quantidade), projeto: novaSaida.projeto, tipo: 'saida', data: new Date().toISOString() };
       const res = await fetch(`${API_URL}/movimentacoes`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(payload) });
       if (res.ok) {
         mostrarNotificacao("Saída registrada!", "sucesso");
@@ -257,7 +214,7 @@ function App() {
         carregarDados();
       } else {
         const err = await res.json();
-        mostrarNotificacao(err.detail || "Erro ao registrar.", "erro");
+        mostrarNotificacao(err.detail, "erro");
       }
     } catch (err) { mostrarNotificacao("Erro de conexão!", "erro"); }
   };
@@ -271,11 +228,9 @@ function App() {
       const res = await fetch(`${API_URL}/estoque/${itemEditando.id}`, { method: 'PUT', headers: getHeaders(), body: JSON.stringify(payload) });
       if (res.ok) {
         mostrarNotificacao("Material atualizado!", "sucesso");
-        setItemEditando(null);
-        carregarDados();
+        setItemEditando(null); carregarDados();
       } else {
-        const err = await res.json();
-        mostrarNotificacao(err.detail, "erro");
+        const err = await res.json(); mostrarNotificacao(err.detail, "erro");
       }
     } catch (err) { mostrarNotificacao("Erro de conexão!", "erro"); }
   };
@@ -284,87 +239,43 @@ function App() {
     if (!itemParaExcluir) return;
     try {
       const res = await fetch(`${API_URL}/estoque/${itemParaExcluir.id}`, { method: 'DELETE', headers: getHeaders() });
-      if(res.ok){
-        mostrarNotificacao("Item removido do estoque!", "sucesso");
-        carregarDados();
-      } else {
-        const err = await res.json();
-        mostrarNotificacao(err.detail, "erro");
-      }
+      if(res.ok){ mostrarNotificacao("Item removido!", "sucesso"); carregarDados(); } 
+      else { const err = await res.json(); mostrarNotificacao(err.detail, "erro"); }
     } catch (err) { mostrarNotificacao("Erro ao excluir.", "erro"); }
     setItemParaExcluir(null);
   };
 
   const enviarSolicitacao = async (e) => {
     e.preventDefault();
-    if (modalSolicitar.quantidade > modalSolicitar.item.quantidade) return mostrarNotificacao("Estoque insuficiente no outro departamento", "erro");
-    
+    if (modalSolicitar.quantidade > modalSolicitar.item.quantidade) return mostrarNotificacao("Estoque insuficiente", "erro");
     try {
-      const payload = { 
-        item_id: modalSolicitar.item.id, 
-        quantidade: parseInt(modalSolicitar.quantidade), 
-        dept_solicitado_id: modalSolicitar.item.departamento_id 
-      };
+      const payload = { item_id: modalSolicitar.item.id, quantidade: parseInt(modalSolicitar.quantidade), dept_solicitado_id: modalSolicitar.item.departamento_id };
       const res = await fetch(`${API_URL}/solicitacoes`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(payload) });
-      
       if (res.ok) {
-        mostrarNotificacao("Solicitação enviada com sucesso!", "sucesso");
+        mostrarNotificacao("Solicitação enviada!", "sucesso");
         setModalSolicitar({ visivel: false, item: null, quantidade: 1 });
         carregarDados();
-      } else {
-        const err = await res.json();
-        mostrarNotificacao(err.detail, "erro");
-      }
-    } catch (err) { mostrarNotificacao("Erro de conexão!", "erro"); }
+      } else { const err = await res.json(); mostrarNotificacao(err.detail, "erro"); }
+    } catch (err) { mostrarNotificacao("Erro!", "erro"); }
   };
 
   const responderSolicitacao = async (id, status) => {
     try {
       const res = await fetch(`${API_URL}/solicitacoes/${id}/responder`, { method: 'PUT', headers: getHeaders(), body: JSON.stringify({ status }) });
-      if (res.ok) {
-        mostrarNotificacao(`Solicitação ${status}!`, "sucesso");
-        carregarDados();
-      } else {
-        const err = await res.json();
-        mostrarNotificacao(err.detail, "erro");
-      }
-    } catch (err) { mostrarNotificacao("Erro de conexão!", "erro"); }
+      if (res.ok) { mostrarNotificacao(`Solicitação ${status}!`, "sucesso"); carregarDados(); } 
+      else { const err = await res.json(); mostrarNotificacao(err.detail, "erro"); }
+    } catch (err) { mostrarNotificacao("Erro!", "erro"); }
   };
 
   const categoriasUnicas = [...new Set(itens.map(i => i.categoria))];
   const projetosUnicos = [...new Set(saidas.map(s => s.projeto).filter(Boolean))];
 
-  const itensFiltrados = itens.filter(item => {
-    return item.nome.toLowerCase().includes(busca.toLowerCase()) && (filtroCategoria === '' || item.categoria === filtroCategoria);
-  });
-
-  const obterNomeItem = (item_id) => {
-    const it = itens.find(i => i.id === item_id);
-    return it ? it.nome : `Item ID ${item_id}`;
-  };
-
-  const saidasFiltradas = saidas.filter(s => {
-    const nomeItem = obterNomeItem(s.item_id).toLowerCase();
-    return nomeItem.includes(buscaSaida.toLowerCase()) && (filtroProjeto === '' || s.projeto === filtroProjeto);
-  });
+  const itensFiltrados = itens.filter(item => item.nome.toLowerCase().includes(busca.toLowerCase()) && (filtroCategoria === '' || item.categoria === filtroCategoria));
+  const obterNomeItem = (item_id) => { const it = itens.find(i => i.id === item_id); return it ? it.nome : `ID ${item_id}`; };
+  const saidasFiltradas = saidas.filter(s => obterNomeItem(s.item_id).toLowerCase().includes(buscaSaida.toLowerCase()) && (filtroProjeto === '' || s.projeto === filtroProjeto));
 
   const itensAtuais = itensFiltrados.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
   const totalPaginas = Math.ceil(itensFiltrados.length / itensPorPagina);
-
-  const estatisticasProjetos = () => {
-    const totais = {};
-    let totalGeral = 0;
-    saidas.forEach(s => {
-      const proj = s.projeto || 'Outros / Sem Projeto';
-      totais[proj] = (totais[proj] || 0) + s.quantidade;
-      totalGeral += s.quantidade;
-    });
-    return Object.keys(totais).map(p => ({
-      projeto: p,
-      quantidade: totais[p],
-      porcentagem: totalGeral > 0 ? ((totais[p] / totalGeral) * 100).toFixed(1) : 0
-    })).sort((a,b) => b.quantidade - a.quantidade);
-  };
 
   if (!user) {
     return (
@@ -373,29 +284,13 @@ function App() {
         <div style={{ backgroundColor: CORES.roxoClaro, height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', boxSizing: 'border-box' }}>
           <div style={{ backgroundColor: CORES.branco, padding: '40px 30px', borderRadius: '15px', boxShadow: '0 4px 15px rgba(0,0,0,0.2)', textAlign: 'center', width: '100%', maxWidth: '380px' }}>
             <img src="/logo-territorio.png" alt="Logo Territorio" style={{ width: '130px', marginBottom: '15px' }} />
-            <h2 style={{ color: CORES.roxoEscuro, margin: '0 0 5px 0', fontSize: '22px' }}>Controle de Materiais</h2>
+            <h2 style={{ color: CORES.roxoEscuro, margin: '0 0 5px 0', fontSize: '22px' }}>Acesso Restrito</h2>
             <p style={{ color: CORES.roxoMedio, marginBottom: '25px', marginTop: 0, fontSize: '14px' }}>Território do Fazer</p>
-            
-            {modoLogin ? (
-              <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                <input type="text" placeholder="Usuário" style={{...styles.input, marginBottom: 0}} onChange={e => setLoginForm({...loginForm, usuario: e.target.value})} />
-                <input type="password" placeholder="Senha" style={{...styles.input, marginBottom: 0}} onChange={e => setLoginForm({...loginForm, senha: e.target.value})} />
-                <button type="submit" style={styles.btnPrincipal}>ENTRAR</button>
-                <p style={{fontSize: '13px', color: '#7f8c8d', cursor: 'pointer', marginTop: '10px'}} onClick={() => setModoLogin(false)}>Não tem conta? Cadastre-se</p>
-              </form>
-            ) : (
-              <form onSubmit={handleCadastrarUsuario} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                <input type="text" required placeholder="Nome Completo" style={{...styles.input, marginBottom: 0}} onChange={e => setNovoUsuario({...novoUsuario, nome: e.target.value})} />
-                <input type="text" required placeholder="Cargo/Função" style={{...styles.input, marginBottom: 0}} onChange={e => setNovoUsuario({...novoUsuario, cargo: e.target.value})} />
-                
-                <input type="number" placeholder="ID do Departamento (Ex: 1)" style={{...styles.input, marginBottom: 0}} onChange={e => setNovoUsuario({...novoUsuario, departamento_id: e.target.value})} />
-                
-                <input type="text" required placeholder="Usuário (Login)" style={{...styles.input, marginBottom: 0}} onChange={e => setNovoUsuario({...novoUsuario, usuario: e.target.value})} />
-                <input type="password" required placeholder="Senha Segura" style={{...styles.input, marginBottom: 0}} onChange={e => setNovoUsuario({...novoUsuario, senha: e.target.value})} />
-                <button type="submit" style={{...styles.btnPrincipal, backgroundColor: CORES.roxoMedio, color: 'white'}}>CRIAR CONTA</button>
-                <p style={{fontSize: '13px', color: '#7f8c8d', cursor: 'pointer', marginTop: '10px'}} onClick={() => setModoLogin(true)}>Já tenho conta. Voltar ao Login</p>
-              </form>
-            )}
+            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <input type="text" placeholder="Usuário" style={{...styles.input, marginBottom: 0}} onChange={e => setLoginForm({...loginForm, usuario: e.target.value})} />
+              <input type="password" placeholder="Senha" style={{...styles.input, marginBottom: 0}} onChange={e => setLoginForm({...loginForm, senha: e.target.value})} />
+              <button type="submit" style={styles.btnPrincipal}>ENTRAR</button>
+            </form>
           </div>
         </div>
       </>
@@ -407,9 +302,7 @@ function App() {
       <NotificacaoUI />
       <div style={{ display: 'flex', height: '100vh', width: '100%', overflow: 'hidden' }}>
         
-        {isMobile && menuAberto && (
-          <div onClick={() => setMenuAberto(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 998 }} />
-        )}
+        {isMobile && menuAberto && <div onClick={() => setMenuAberto(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 998 }} />}
 
         <div style={{ width: '250px', backgroundColor: CORES.roxoEscuro, color: CORES.branco, display: 'flex', flexDirection: 'column', padding: '20px', position: isMobile ? 'fixed' : 'relative', height: '100%', top: 0, left: isMobile ? (menuAberto ? '0' : '-250px') : '0', transition: 'left 0.3s ease', zIndex: 999, boxSizing: 'border-box' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${CORES.roxoMedio}`, paddingBottom: '10px', marginBottom: '20px' }}>
@@ -438,12 +331,12 @@ function App() {
           <div style={{ height: '1px', backgroundColor: CORES.roxoMedio, margin: '10px 0' }} />
           
           {user.nivel_acesso === 'admin_geral' && (
-            <button onClick={() => mudarView('configs')} style={{...styles.navBtn, backgroundColor: view === 'configs' ? CORES.roxoMedio : 'transparent'}}>⚙️ Usuários Avançado</button>
+            <button onClick={() => mudarView('configs')} style={{...styles.navBtn, backgroundColor: view === 'configs' ? CORES.roxoMedio : 'transparent'}}>⚙️ Controle de Usuários</button>
           )}
           
           <div style={{ marginTop: 'auto' }}>
             <p style={{ fontWeight: 'bold' }}>Olá, {user.nome}</p>
-            <p style={{ fontSize: '12px', color: CORES.roxoClaro }}>Dept: {user.departamento_id} | {user.nivel_acesso}</p>
+            <p style={{ fontSize: '12px', color: CORES.roxoClaro }}>Nível: {user.nivel_acesso.replace('_', ' ')}</p>
             <button onClick={deslogar} style={{ ...styles.navBtn, backgroundColor: CORES.laranja, color: 'black', width: '100%', marginTop: '10px' }}>Sair</button>
           </div>
         </div>
@@ -453,11 +346,9 @@ function App() {
           <div style={{ height: '80px', minHeight: '80px', backgroundColor: CORES.branco, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: isMobile ? '0 10px' : '0 30px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               {isMobile && <button onClick={() => setMenuAberto(true)} style={{ background: 'transparent', border: 'none', fontSize: '26px', marginRight: '10px', color: CORES.roxoEscuro }}>☰</button>}
-              <img src="/logo-territorio.png" alt="Logo Território" style={{ height: isMobile ? '35px' : '50px' }} />
+              <img src="/logo-territorio.png" alt="Logo" style={{ height: isMobile ? '35px' : '50px' }} />
             </div>
-            <h2 style={{ color: CORES.roxoEscuro, fontSize: isMobile ? '14px' : '20px', textAlign: 'center', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              Controle de Materiais
-            </h2>
+            <h2 style={{ color: CORES.roxoEscuro, fontSize: isMobile ? '14px' : '20px', textAlign: 'center', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Controle de Materiais</h2>
             <img src="/logo-instituto.png" alt="Logo Instituto" style={{ height: isMobile ? '25px' : '40px' }} />
           </div>
 
@@ -518,12 +409,11 @@ function App() {
                     </tbody>
                   </table>
                 </div>
-
                 {totalPaginas > 1 && (
-                  <div style={{ display: 'flex', alignItems: 'center', marginTop: '20px', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                    <button onClick={() => setPaginaAtual(paginaAtual - 1)} disabled={paginaAtual === 1} style={{ ...styles.btnPrincipal, width: 'auto', padding: '10px 15px', backgroundColor: paginaAtual === 1 ? CORES.roxoClaro : CORES.roxoMedio, color: CORES.branco }}>Anterior</button>
-                    <span style={{ color: CORES.roxoEscuro, fontWeight: 'bold' }}>Pág. {paginaAtual} de {totalPaginas}</span>
-                    <button onClick={() => setPaginaAtual(paginaAtual + 1)} disabled={paginaAtual === totalPaginas} style={{ ...styles.btnPrincipal, width: 'auto', padding: '10px 15px', backgroundColor: paginaAtual === totalPaginas ? CORES.roxoClaro : CORES.roxoMedio, color: CORES.branco }}>Próxima</button>
+                  <div style={{ display: 'flex', alignItems: 'center', marginTop: '20px', gap: '10px', justifyContent: 'center' }}>
+                    <button onClick={() => setPaginaAtual(paginaAtual - 1)} disabled={paginaAtual === 1} style={{ ...styles.btnPrincipal, width: 'auto', padding: '10px 15px' }}>Anterior</button>
+                    <span style={{ color: CORES.roxoEscuro, fontWeight: 'bold' }}>Pág. {paginaAtual}</span>
+                    <button onClick={() => setPaginaAtual(paginaAtual + 1)} disabled={paginaAtual === totalPaginas} style={{ ...styles.btnPrincipal, width: 'auto', padding: '10px 15px' }}>Próxima</button>
                   </div>
                 )}
               </div>
@@ -583,14 +473,8 @@ function App() {
                     <datalist id="cat-list">{categoriasUnicas.map(c => <option key={c} value={c} />)}</datalist>
                     
                     <div style={{ display: 'flex', gap: '10px' }}>
-                      <div style={{ flex: 1 }}>
-                        <label>Qtd Inicial</label>
-                        <input type="number" required min="0" style={styles.input} value={novoItem.quantidade} onChange={e => setNovoItem({...novoItem, quantidade: e.target.value})} />
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <label>Alerta Mínimo</label>
-                        <input type="number" required min="0" style={styles.input} value={novoItem.quantidade_minima} onChange={e => setNovoItem({...novoItem, quantidade_minima: e.target.value})} />
-                      </div>
+                      <div style={{ flex: 1 }}><label>Qtd Inicial</label><input type="number" required min="0" style={styles.input} value={novoItem.quantidade} onChange={e => setNovoItem({...novoItem, quantidade: e.target.value})} /></div>
+                      <div style={{ flex: 1 }}><label>Alerta Mínimo</label><input type="number" required min="0" style={styles.input} value={novoItem.quantidade_minima} onChange={e => setNovoItem({...novoItem, quantidade_minima: e.target.value})} /></div>
                     </div>
                     
                     <label>Localização Física</label><input type="text" required style={styles.input} value={novoItem.localizacao} onChange={e => setNovoItem({...novoItem, localizacao: e.target.value})} />
@@ -628,29 +512,12 @@ function App() {
 
             {view === 'historico_saidas' && (
               <div>
-                <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Dashboard de Projetos</h3>
-                
-                <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', marginBottom: '15px', gap: '10px' }}>
-                  <h4 style={{ margin: 0, color: CORES.roxoEscuro }}>Registros de Movimentação</h4>
-                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
-                    <input type="text" placeholder="Buscar material..." style={{...styles.input, marginBottom: 0, width: isMobile ? '100%' : '200px'}} value={buscaSaida} onChange={(e) => setBuscaSaida(e.target.value)} />
-                    <select style={{...styles.input, marginBottom: 0, width: isMobile ? 'calc(100% - 110px)' : '200px'}} value={filtroProjeto} onChange={(e) => setFiltroProjeto(e.target.value)}>
-                      <option value="">Todos os Projetos</option>
-                      {projetosUnicos.map(p => <option key={p} value={p}>{p}</option>)}
-                    </select>
-                    <button onClick={handleBaixarPDFSaidas} style={{...styles.btnPrincipal, width: 'auto', backgroundColor: CORES.roxoEscuro, color: 'white'}}>📄 PDF</button>
-                  </div>
-                </div>
-
+                <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Registros de Movimentação</h3>
                 <div style={{ overflowX: 'auto', backgroundColor: 'white', borderRadius: '5px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
                   <table style={styles.table}>
                     <thead>
                       <tr style={{ backgroundColor: CORES.laranja, color: 'black' }}>
-                        <th style={{ padding: '12px' }}>Data</th>
-                        <th style={{ padding: '12px' }}>Projeto</th>
-                        <th style={{ padding: '12px' }}>Material</th>
-                        <th style={{ padding: '12px' }}>Usuário / Dept.</th>
-                        <th style={{ padding: '12px' }}>Qtd</th>
+                        <th style={{ padding: '12px' }}>Data</th><th style={{ padding: '12px' }}>Projeto</th><th style={{ padding: '12px' }}>Material</th><th style={{ padding: '12px' }}>Usuário / Dept.</th><th style={{ padding: '12px' }}>Qtd</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -662,7 +529,7 @@ function App() {
                           <td style={{ padding: '12px', fontSize: '12px' }}>{s.usuarios?.nome || 'Admin'} <br/><span style={{color: '#7f8c8d'}}>({s.departamentos?.nome || 'Central'})</span></td>
                           <td style={{ padding: '12px', fontWeight: 'bold', color: CORES.vermelho }}>- {s.quantidade}</td>
                         </tr>
-                      )) : <tr><td colSpan="5" style={{ padding: '20px', textAlign: 'center' }}>Nenhum registro encontrado.</td></tr>}
+                      )) : <tr><td colSpan="5" style={{ padding: '20px', textAlign: 'center' }}>Nenhum registro.</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -671,18 +538,26 @@ function App() {
 
             {view === 'configs' && user.nivel_acesso === 'admin_geral' && (
               <div>
-                <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Criar Novo Acesso (Admin Geral)</h3>
+                <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Controle de Acesso de Usuários</h3>
                 <div style={styles.formCard}>
                   <form onSubmit={handleCadastrarUsuario}>
-                    <label>Nome Completo</label><input type="text" required style={styles.input} value={novoUsuario.nome} onChange={e => setNovoUsuario({...novoUsuario, nome: e.target.value})} />
-                    <label>Cargo / Função</label><input type="text" placeholder="Ex: Professor" required style={styles.input} value={novoUsuario.cargo} onChange={e => setNovoUsuario({...novoUsuario, cargo: e.target.value})} />
+                    <label>Nome Completo do Novo Usuário</label><input type="text" required style={styles.input} value={novoUsuario.nome} onChange={e => setNovoUsuario({...novoUsuario, nome: e.target.value})} />
+                    <label>Cargo / Função</label><input type="text" placeholder="Ex: Professor Responsável" required style={styles.input} value={novoUsuario.cargo} onChange={e => setNovoUsuario({...novoUsuario, cargo: e.target.value})} />
                     
-                    <label>ID do Departamento (Ex: 1, 2, 3...)</label>
-                    <input type="number" required style={styles.input} value={novoUsuario.departamento_id} onChange={e => setNovoUsuario({...novoUsuario, departamento_id: e.target.value})} />
-                    
+                    <label>Departamento (Digite para buscar ou criar)</label>
+                    <input type="text" required style={styles.input} list="depts-list" value={novoUsuario.departamento_nome} onChange={e => setNovoUsuario({...novoUsuario, departamento_nome: e.target.value})} placeholder="Ex: Informática" />
+                    <datalist id="depts-list">{departamentos.map(d => <option key={d.id} value={d.nome} />)}</datalist>
+
+                    <label>Nível de Acesso no Sistema</label>
+                    <select style={styles.input} value={novoUsuario.nivel_acesso} onChange={e => setNovoUsuario({...novoUsuario, nivel_acesso: e.target.value})}>
+                      <option value="usuario_dept">Usuário Padrão (Vê e opera apenas o seu Dept.)</option>
+                      <option value="admin_geral">Administrador Geral (Vê e opera tudo, cria usuários)</option>
+                    </select>
+
                     <label>Usuário (Login)</label><input type="text" required style={styles.input} value={novoUsuario.usuario} onChange={e => setNovoUsuario({...novoUsuario, usuario: e.target.value})} />
-                    <label>Senha</label><input type="password" required style={styles.input} value={novoUsuario.senha} onChange={e => setNovoUsuario({...novoUsuario, senha: e.target.value})} />
-                    <button type="submit" style={{...styles.btnPrincipal, marginTop: '10px'}}>Registrar Usuário</button>
+                    <label>Senha Provisória</label><input type="password" required style={styles.input} value={novoUsuario.senha} onChange={e => setNovoUsuario({...novoUsuario, senha: e.target.value})} />
+                    
+                    <button type="submit" style={{...styles.btnPrincipal, marginTop: '10px'}}>Registrar Novo Usuário</button>
                   </form>
                 </div>
               </div>
@@ -691,28 +566,19 @@ function App() {
           </div>
         </div>
 
+        {/* MODAIS */}
         {itemEditando && (
           <div style={styles.modalOverlay}>
             <div style={styles.formCard}>
               <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Editar Material</h3>
               <form onSubmit={handleSalvarEdicao}>
                 <label>Nome do Item</label><input type="text" required style={styles.input} value={itemEditando.nome} onChange={e => setItemEditando({...itemEditando, nome: e.target.value})} />
-                <label>Categoria</label>
-                <input type="text" required style={styles.input} list="cat-edit-list" value={itemEditando.categoria} onChange={e => setItemEditando({...itemEditando, categoria: e.target.value})} />
-                
+                <label>Categoria</label><input type="text" required style={styles.input} list="cat-edit-list" value={itemEditando.categoria} onChange={e => setItemEditando({...itemEditando, categoria: e.target.value})} />
                 <div style={{ display: 'flex', gap: '10px' }}>
-                  <div style={{ flex: 1 }}>
-                    <label>Quantidade</label>
-                    <input type="number" required min="0" style={styles.input} value={itemEditando.quantidade} onChange={e => setItemEditando({...itemEditando, quantidade: e.target.value})} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label>Alerta Mínimo</label>
-                    <input type="number" required min="0" style={styles.input} value={itemEditando.quantidade_minima || '0'} onChange={e => setItemEditando({...itemEditando, quantidade_minima: e.target.value})} />
-                  </div>
+                  <div style={{ flex: 1 }}><label>Quantidade</label><input type="number" required min="0" style={styles.input} value={itemEditando.quantidade} onChange={e => setItemEditando({...itemEditando, quantidade: e.target.value})} /></div>
+                  <div style={{ flex: 1 }}><label>Alerta Mínimo</label><input type="number" required min="0" style={styles.input} value={itemEditando.quantidade_minima || '0'} onChange={e => setItemEditando({...itemEditando, quantidade_minima: e.target.value})} /></div>
                 </div>
-
                 <label>Localização</label><input type="text" required style={styles.input} value={itemEditando.localizacao} onChange={e => setItemEditando({...itemEditando, localizacao: e.target.value})} />
-                
                 <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
                   <button type="submit" style={styles.btnPrincipal}>Salvar</button>
                   <button type="button" style={{...styles.btnPrincipal, backgroundColor: '#bdc3c7', color: 'black'}} onClick={() => setItemEditando(null)}>Cancelar</button>
@@ -726,11 +592,9 @@ function App() {
           <div style={styles.modalOverlay}>
             <div style={{ ...styles.formCard, textAlign: 'center', padding: '30px' }}>
               <h3 style={{ color: CORES.vermelho, marginBottom: '15px', fontSize: '22px' }}>Atenção!</h3>
-              <p style={{ color: '#333', marginBottom: '25px', fontSize: '16px' }}>
-                Excluir o item <strong>{itemParaExcluir.nome}</strong> permanentemente?
-              </p>
+              <p style={{ color: '#333', marginBottom: '25px', fontSize: '16px' }}>Excluir o item <strong>{itemParaExcluir.nome}</strong>?</p>
               <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
-                <button onClick={confirmarExclusao} style={{ ...styles.btnPrincipal, backgroundColor: CORES.vermelho, color: 'white', width: 'auto', padding: '12px 25px' }}>Sim, Excluir</button>
+                <button onClick={confirmarExclusao} style={{ ...styles.btnPrincipal, backgroundColor: CORES.vermelho, color: 'white', width: 'auto', padding: '12px 25px' }}>Excluir</button>
                 <button onClick={() => setItemParaExcluir(null)} style={{ ...styles.btnPrincipal, backgroundColor: '#bdc3c7', color: 'black', width: 'auto', padding: '12px 25px' }}>Cancelar</button>
               </div>
             </div>
@@ -742,11 +606,9 @@ function App() {
             <div style={styles.formCard}>
               <h3 style={{color: CORES.roxoEscuro, marginBottom: '20px'}}>Solicitar Material</h3>
               <p>Solicitando: <b>{modalSolicitar.item.nome}</b> do <b>{modalSolicitar.item.departamentos?.nome || `Dept ${modalSolicitar.item.departamento_id}`}</b></p>
-              
               <form onSubmit={enviarSolicitacao}>
-                <label>Quantidade a pedir (Máx disponível: {modalSolicitar.item.quantidade})</label>
+                <label>Quantidade a pedir (Máx: {modalSolicitar.item.quantidade})</label>
                 <input type="number" required min="1" max={modalSolicitar.item.quantidade} style={styles.input} value={modalSolicitar.quantidade} onChange={e => setModalSolicitar({...modalSolicitar, quantidade: e.target.value})} />
-                
                 <div style={{display: 'flex', gap: '10px', marginTop: '15px'}}>
                   <button type="submit" style={{...styles.btnPrincipal, background: CORES.verde, color: 'white'}}>Enviar Pedido</button>
                   <button type="button" onClick={() => setModalSolicitar({visivel: false, item: null, quantidade: 1})} style={{...styles.btnPrincipal, background: '#bdc3c7'}}>Cancelar</button>
