@@ -36,7 +36,6 @@ function App() {
   
   const [itens, setItens] = useState([]);
   const [saidas, setSaidas] = useState([]);
-  // NOVO: Estados para solicitações e departamentos
   const [solicitacoes, setSolicitacoes] = useState([]);
   const [departamentos, setDepartamentos] = useState([]);
 
@@ -53,7 +52,6 @@ function App() {
   
   const [itemEditando, setItemEditando] = useState(null);
   const [itemParaExcluir, setItemParaExcluir] = useState(null);
-  // NOVO: Controle do modal de solicitação
   const [modalSolicitar, setModalSolicitar] = useState({ visivel: false, item: null, quantidade: 1 });
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -61,8 +59,10 @@ function App() {
 
   const [notificacao, setNotificacao] = useState({ visivel: false, texto: '', tipo: '' });
 
+  // CORREÇÃO: Escudo contra o erro [object Object]. Agora traduz objetos para texto.
   const mostrarNotificacao = (texto, tipo = 'sucesso') => {
-    setNotificacao({ visivel: true, texto, tipo });
+    const msgFormatada = typeof texto === 'string' ? texto : JSON.stringify(texto);
+    setNotificacao({ visivel: true, texto: msgFormatada, tipo });
     setTimeout(() => setNotificacao({ visivel: false, texto: '', tipo: '' }), 3000);
   };
 
@@ -97,7 +97,6 @@ function App() {
 
   useEffect(() => { setPaginaAtual(1); }, [busca, filtroCategoria, buscaSaida, filtroProjeto, view]);
 
-  // NOVO: Função centralizada para carregar todos os dados necessários
   const carregarDados = async () => {
     if (!token) return;
     try {
@@ -128,7 +127,6 @@ function App() {
     if (isMobile) setMenuAberto(false);
   };
 
-  // --- FUNÇÕES DE EXPORTAÇÃO PDF ---
   const handleBaixarPDFEstoque = () => {
     mostrarNotificacao("Gerando relatório de estoque...", "info"); 
     const doc = new jsPDF();
@@ -188,7 +186,6 @@ function App() {
     mostrarNotificacao("Download concluído!", "sucesso");
   };
 
-  // --- AUTENTICAÇÃO E CADASTRO INICIAL ---
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
@@ -207,7 +204,8 @@ function App() {
   const handleCadastrarUsuario = async (e) => {
     e.preventDefault();
     try {
-      const payload = { ...novoUsuario, departamento_id: parseInt(novoUsuario.departamento_id) };
+      // CORREÇÃO: || 1 adicionado. Se o usuário esquecer o departamento, não quebra a API, vai pro dept 1.
+      const payload = { ...novoUsuario, departamento_id: parseInt(novoUsuario.departamento_id) || 1 };
       const res = await fetch(`${API_URL}/usuarios`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (res.ok) {
         mostrarNotificacao("Conta criada com sucesso! Faça login.", "sucesso");
@@ -215,12 +213,11 @@ function App() {
         setModoLogin(true);
       } else {
         const data = await res.json();
-        mostrarNotificacao(`Erro: ${data.detail}`, "erro");
+        mostrarNotificacao(data.detail, "erro");
       }
     } catch (err) { mostrarNotificacao("Erro ao registrar.", "erro"); }
   };
 
-  // --- CRUD (Enviando Token) ---
   const handleCadastrarItem = async (e) => {
     e.preventDefault();
     try {
@@ -231,7 +228,8 @@ function App() {
         setNovoItem({ nome: '', categoria: '', quantidade: '', quantidade_minima: '0', localizacao: '' });
         carregarDados();
       } else {
-        mostrarNotificacao("Erro ao cadastrar.", "erro");
+        const err = await res.json();
+        mostrarNotificacao(err.detail || "Erro ao cadastrar.", "erro");
       }
     } catch (err) { mostrarNotificacao("Erro de conexão!", "erro"); }
   };
@@ -297,7 +295,6 @@ function App() {
     setItemParaExcluir(null);
   };
 
-  // NOVO: Funções de Solicitação
   const enviarSolicitacao = async (e) => {
     e.preventDefault();
     if (modalSolicitar.quantidade > modalSolicitar.item.quantidade) return mostrarNotificacao("Estoque insuficiente no outro departamento", "erro");
@@ -334,7 +331,6 @@ function App() {
     } catch (err) { mostrarNotificacao("Erro de conexão!", "erro"); }
   };
 
-  // --- FILTROS E LÓGICA DE EXIBIÇÃO ---
   const categoriasUnicas = [...new Set(itens.map(i => i.categoria))];
   const projetosUnicos = [...new Set(saidas.map(s => s.projeto).filter(Boolean))];
 
@@ -370,8 +366,6 @@ function App() {
     })).sort((a,b) => b.quantidade - a.quantidade);
   };
 
-
-  // --- RENDERIZAÇÃO DA TELA DE LOGIN / CADASTRO ---
   if (!user) {
     return (
       <>
@@ -394,8 +388,7 @@ function App() {
                 <input type="text" required placeholder="Nome Completo" style={{...styles.input, marginBottom: 0}} onChange={e => setNovoUsuario({...novoUsuario, nome: e.target.value})} />
                 <input type="text" required placeholder="Cargo/Função" style={{...styles.input, marginBottom: 0}} onChange={e => setNovoUsuario({...novoUsuario, cargo: e.target.value})} />
                 
-                {/* Agora você pode puxar os departamentos na hora de criar a conta, mas deixei fixo como texto simples para evitar erro caso não tenha depts carregados fora do login */}
-                <input type="text" placeholder="ID do Departamento (Ex: 1)" style={{...styles.input, marginBottom: 0}} onChange={e => setNovoUsuario({...novoUsuario, departamento_id: e.target.value})} />
+                <input type="number" placeholder="ID do Departamento (Ex: 1)" style={{...styles.input, marginBottom: 0}} onChange={e => setNovoUsuario({...novoUsuario, departamento_id: e.target.value})} />
                 
                 <input type="text" required placeholder="Usuário (Login)" style={{...styles.input, marginBottom: 0}} onChange={e => setNovoUsuario({...novoUsuario, usuario: e.target.value})} />
                 <input type="password" required placeholder="Senha Segura" style={{...styles.input, marginBottom: 0}} onChange={e => setNovoUsuario({...novoUsuario, senha: e.target.value})} />
@@ -409,7 +402,6 @@ function App() {
     );
   }
 
-  // --- RENDERIZAÇÃO DO SISTEMA INTERNO ---
   return (
     <>
       <NotificacaoUI />
@@ -427,7 +419,6 @@ function App() {
           
           <button onClick={() => mudarView('estoque')} style={{...styles.navBtn, backgroundColor: view === 'estoque' ? CORES.roxoMedio : 'transparent'}}>📦 Ver Estoque</button>
           
-          {/* NOVO: Menu da Caixa de Solicitações */}
           <button onClick={() => mudarView('solicitacoes')} style={{...styles.navBtn, backgroundColor: view === 'solicitacoes' ? CORES.roxoMedio : 'transparent', position: 'relative'}}>
             📥 Solicitações
             {solicitacoes.filter(s => s.dept_solicitado_id === user.departamento_id && s.status === 'pendente').length > 0 && (
@@ -472,7 +463,6 @@ function App() {
 
           <div style={{ padding: isMobile ? '15px' : '30px', overflowY: 'auto', height: 'calc(100vh - 80px)', boxSizing: 'border-box' }}>
             
-            {/* TELA 1: ESTOQUE */}
             {view === 'estoque' && (
               <div>
                 <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', marginBottom: '20px', gap: '15px' }}>
@@ -520,7 +510,6 @@ function App() {
                                 <button style={styles.btnExcluir} onClick={() => setItemParaExcluir(i)}>🗑️</button>
                               </>
                             ) : (
-                              // NOVO: Botão de solicitar para itens de outro departamento
                               <button style={{...styles.btnEditar, backgroundColor: CORES.roxoEscuro}} onClick={()=>setModalSolicitar({visivel: true, item: i, quantidade: 1})}>🤝 Solicitar</button>
                             )}
                           </td>
@@ -530,7 +519,6 @@ function App() {
                   </table>
                 </div>
 
-                {/* Paginação mantida perfeitamente */}
                 {totalPaginas > 1 && (
                   <div style={{ display: 'flex', alignItems: 'center', marginTop: '20px', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
                     <button onClick={() => setPaginaAtual(paginaAtual - 1)} disabled={paginaAtual === 1} style={{ ...styles.btnPrincipal, width: 'auto', padding: '10px 15px', backgroundColor: paginaAtual === 1 ? CORES.roxoClaro : CORES.roxoMedio, color: CORES.branco }}>Anterior</button>
@@ -541,7 +529,6 @@ function App() {
               </div>
             )}
 
-            {/* NOVO: TELA DE SOLICITAÇÕES */}
             {view === 'solicitacoes' && (
               <div>
                 <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Caixa de Solicitações</h3>
@@ -585,7 +572,6 @@ function App() {
               </div>
             )}
 
-            {/* TELA 2: CADASTRAR ITEM */}
             {view === 'gerenciar' && (
               <div>
                 <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Adicionar Novo Material (Ao seu Dept.)</h3>
@@ -614,7 +600,6 @@ function App() {
               </div>
             )}
 
-            {/* TELA 3: REGISTRAR SAÍDA */}
             {view === 'nova_saida' && (
               <div>
                 <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Registrar Saída (Do seu Dept.)</h3>
@@ -641,7 +626,6 @@ function App() {
               </div>
             )}
 
-            {/* TELA 4: HISTÓRICO E GRÁFICOS */}
             {view === 'historico_saidas' && (
               <div>
                 <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Dashboard de Projetos</h3>
@@ -685,7 +669,6 @@ function App() {
               </div>
             )}
 
-            {/* TELA 5: CONFIGURAÇÕES */}
             {view === 'configs' && user.nivel_acesso === 'admin_geral' && (
               <div>
                 <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Criar Novo Acesso (Admin Geral)</h3>
@@ -695,7 +678,7 @@ function App() {
                     <label>Cargo / Função</label><input type="text" placeholder="Ex: Professor" required style={styles.input} value={novoUsuario.cargo} onChange={e => setNovoUsuario({...novoUsuario, cargo: e.target.value})} />
                     
                     <label>ID do Departamento (Ex: 1, 2, 3...)</label>
-                    <input type="text" required style={styles.input} value={novoUsuario.departamento_id} onChange={e => setNovoUsuario({...novoUsuario, departamento_id: e.target.value})} />
+                    <input type="number" required style={styles.input} value={novoUsuario.departamento_id} onChange={e => setNovoUsuario({...novoUsuario, departamento_id: e.target.value})} />
                     
                     <label>Usuário (Login)</label><input type="text" required style={styles.input} value={novoUsuario.usuario} onChange={e => setNovoUsuario({...novoUsuario, usuario: e.target.value})} />
                     <label>Senha</label><input type="password" required style={styles.input} value={novoUsuario.senha} onChange={e => setNovoUsuario({...novoUsuario, senha: e.target.value})} />
@@ -708,7 +691,6 @@ function App() {
           </div>
         </div>
 
-        {/* MODAL DE EDIÇÃO */}
         {itemEditando && (
           <div style={styles.modalOverlay}>
             <div style={styles.formCard}>
@@ -740,7 +722,6 @@ function App() {
           </div>
         )}
 
-        {/* MODAL EXCLUSÃO */}
         {itemParaExcluir && (
           <div style={styles.modalOverlay}>
             <div style={{ ...styles.formCard, textAlign: 'center', padding: '30px' }}>
@@ -756,7 +737,6 @@ function App() {
           </div>
         )}
 
-        {/* NOVO: MODAL SOLICITAÇÃO */}
         {modalSolicitar.visivel && (
           <div style={styles.modalOverlay}>
             <div style={styles.formCard}>
