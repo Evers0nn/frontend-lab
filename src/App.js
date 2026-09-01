@@ -19,8 +19,8 @@ const styles = {
   btnPrincipal: { padding: '12px', backgroundColor: CORES.laranja, border: 'none', borderRadius: '5px', color: 'black', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', width: '100%' },
   btnExcluir: { padding: '8px 12px', backgroundColor: CORES.vermelho, color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' },
   btnEditar: { padding: '8px 12px', backgroundColor: '#3498db', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', marginRight: '5px' },
-  navBtn: { padding: '15px', backgroundColor: 'transparent', border: 'none', color: CORES.branco, textAlign: 'left', cursor: 'pointer', fontSize: '15px', marginBottom: '5px', borderRadius: '5px' },
-  table: { width: '100%', borderCollapse: 'collapse', backgroundColor: 'white', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', minWidth: '700px' },
+  navBtn: { padding: '15px', backgroundColor: 'transparent', border: 'none', color: CORES.branco, textAlign: 'left', cursor: 'pointer', fontSize: '15px', marginBottom: '5px', borderRadius: '5px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  table: { width: '100%', borderCollapse: 'collapse', backgroundColor: 'white', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', minWidth: '850px' },
   formCard: { backgroundColor: CORES.branco, padding: '25px', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', maxWidth: '500px', width: '100%', boxSizing: 'border-box' },
   modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '20px' }
 };
@@ -37,6 +37,7 @@ function App() {
   const [saidas, setSaidas] = useState([]);
   const [solicitacoes, setSolicitacoes] = useState([]);
   const [departamentos, setDepartamentos] = useState([]);
+  const [auditoria, setAuditoria] = useState([]);
 
   const [busca, setBusca] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('');
@@ -55,7 +56,6 @@ function App() {
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [menuAberto, setMenuAberto] = useState(false);
-
   const [notificacao, setNotificacao] = useState({ visivel: false, texto: '', tipo: '' });
 
   const mostrarNotificacao = (texto, tipo = 'sucesso') => {
@@ -76,16 +76,9 @@ function App() {
 
   const API_URL = "https://gest-olab.onrender.com";
 
-  const getHeaders = () => ({
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`
-  });
+  const getHeaders = () => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` });
 
-  const deslogar = () => {
-    setUser(null);
-    setToken(null);
-    mostrarNotificacao("Sessão encerrada.", "info");
-  };
+  const deslogar = () => { setUser(null); setToken(null); };
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -106,56 +99,67 @@ function App() {
       ]);
       
       if (resEstoque.status === 401) return deslogar();
-      
       if (resEstoque.ok) setItens(await resEstoque.json());
       if (resSaidas.ok) setSaidas(await resSaidas.json());
       if (resDepts.ok) setDepartamentos(await resDepts.json());
       if (resSolic.ok) setSolicitacoes(await resSolic.json());
-    } catch (err) { console.error("Erro ao carregar dados."); }
+
+      if (user && parseInt(user.nivel_acesso) === 0) {
+        const resAud = await fetch(`${API_URL}/auditoria`, { headers: getHeaders() });
+        if (resAud.ok) setAuditoria(await resAud.json());
+      }
+    } catch (err) { console.error("Erro ao carregar dados do servidor."); }
   };
 
-  useEffect(() => { 
-    if (user && token) {
-      carregarDados();
-    }
-  }, [user, token, view]);
+  useEffect(() => { if (user && token) carregarDados(); }, [user, token, view]);
 
-  const mudarView = (novaView) => {
-    setView(novaView);
-    if (isMobile) setMenuAberto(false);
-  };
+  const mudarView = (novaView) => { setView(novaView); if (isMobile) setMenuAberto(false); };
 
   const getNomeNivel = (nivel) => {
-    const n = parseInt(nivel);
-    if (n === 0) return "Nível 0: Admin Geral";
-    if (n === 1) return "Nível 1: Responsável";
+    if (nivel === 0) return "Nível 0: Admin Geral";
+    if (nivel === 1) return "Nível 1: Responsável";
     return "Nível 2: Monitor";
   };
 
+  const getNomeDepartamento = (id) => {
+    const d = departamentos.find(dept => dept.id === id);
+    return d ? d.nome : `Dept. ${id}`;
+  };
+
   const handleBaixarPDFEstoque = () => {
-    mostrarNotificacao("Gerando relatório...", "info"); 
+    mostrarNotificacao("Gerando relatório em PDF...", "info"); 
     const doc = new jsPDF();
     doc.setFont("Arial", "bold"); doc.setFontSize(18); doc.setTextColor(87, 69, 145);
     doc.text("Controle de Materiais - Território do Fazer", 14, 20);
     doc.setFontSize(10); doc.setTextColor(118, 106, 167);
     doc.text(`Relatório de Estoque Oficial — Emitido em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 27);
     
-    doc.autoTable({ startY: 35, head: [["ID", "Material", "Categoria", "Dept.", "Qtd", "Local"]], body: itensFiltrados.map(i => [i.id, i.nome, i.categoria, i.departamentos?.nome || `Dept ${i.departamento_id}`, i.quantidade, i.localizacao || "-"]), headStyles: { fillColor: [87, 69, 145] } });
-    doc.save(`estoque_${new Date().toISOString().slice(0,10)}.pdf`);
-    mostrarNotificacao("Download concluído!", "sucesso");
+    doc.autoTable({ 
+      startY: 35, 
+      head: [["ID", "Material", "Categoria", "Dept.", "Qtd", "Local"]], 
+      body: itensFiltrados.map(i => [i.id, i.nome, i.categoria, i.departamentos?.nome || getNomeDepartamento(i.departamento_id), i.quantidade, i.localizacao || "-"]), 
+      headStyles: { fillColor: [87, 69, 145] } 
+    });
+    doc.save(`relatorio_estoque_${new Date().toISOString().slice(0,10)}.pdf`);
+    mostrarNotificacao("Download do PDF concluído!", "sucesso");
   };
 
   const handleBaixarPDFSaidas = () => {
-    mostrarNotificacao("Gerando relatório...", "info"); 
+    mostrarNotificacao("Gerando relatório em PDF...", "info"); 
     const doc = new jsPDF();
     doc.setFont("Arial", "bold"); doc.setFontSize(18); doc.setTextColor(87, 69, 145);
     doc.text("Histórico de Saídas - Território do Fazer", 14, 20);
     doc.setFontSize(10); doc.setTextColor(118, 106, 167);
     doc.text(`Emitido em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 27);
     
-    doc.autoTable({ startY: 35, head: [["Item", "Projeto", "Dept.", "Qtd", "Data"]], body: saidasFiltradas.map(s => [obterNomeItem(s.item_id), s.projeto, s.departamentos?.nome || '-', s.quantidade, s.data ? new Date(s.data).toLocaleDateString('pt-BR') : '-']), headStyles: { fillColor: [244, 165, 33], textColor: [0,0,0] } });
-    doc.save(`saidas_${new Date().toISOString().slice(0,10)}.pdf`);
-    mostrarNotificacao("Download concluído!", "sucesso");
+    doc.autoTable({ 
+      startY: 35, 
+      head: [["Item", "Projeto", "Dept.", "Qtd", "Data"]], 
+      body: saidasFiltradas.map(s => [obterNomeItem(s.item_id), s.projeto, s.departamentos?.nome || getNomeDepartamento(s.departamento_id), s.quantidade, s.data ? new Date(s.data).toLocaleDateString('pt-BR') : '-']), 
+      headStyles: { fillColor: [244, 165, 33], textColor: [0,0,0] } 
+    });
+    doc.save(`historico_saidas_${new Date().toISOString().slice(0,10)}.pdf`);
+    mostrarNotificacao("Download do PDF concluído!", "sucesso");
   };
 
   const handleLogin = async (e) => {
@@ -163,75 +167,62 @@ function App() {
     try {
       const res = await fetch(`${API_URL}/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(loginForm) });
       const data = await res.json();
-      if (res.ok && data.status === "sucesso") {
-        setToken(data.access_token);
-        setUser(data.usuario);
-        mostrarNotificacao(`Bem-vindo(a), ${data.usuario.nome}!`, "sucesso");
-      } else {
-        mostrarNotificacao(data.detail || "Usuário ou senha incorretos!", "erro");
+      if (res.ok && data.status === "sucesso") { 
+        setToken(data.access_token); 
+        setUser(data.usuario); 
+        mostrarNotificacao(`Bem-vindo(a), ${data.usuario.nome}!`); 
+      } else { 
+        mostrarNotificacao(data.detail || "Usuário ou senha incorretos!", "erro"); 
       }
-    } catch (err) { mostrarNotificacao("Erro de conexão com o servidor.", "erro"); }
+    } catch (err) { mostrarNotificacao("Erro de conexão.", "erro"); }
   };
 
   const handleCadastrarUsuario = async (e) => {
     e.preventDefault();
-    const deptAlvo = parseInt(user.nivel_acesso) === 1 
-      ? (departamentos.find(d => d.id === user.departamento_id)?.nome || novoUsuario.departamento_nome)
-      : novoUsuario.departamento_nome;
-
+    const deptAlvo = parseInt(user.nivel_acesso) === 1 ? getNomeDepartamento(user.departamento_id) : novoUsuario.departamento_nome;
     if (!deptAlvo) return mostrarNotificacao("Informe o departamento.", "erro");
-
     try {
-      const payload = { 
-        ...novoUsuario, 
-        departamento_nome: deptAlvo,
-        nivel_acesso: parseInt(novoUsuario.nivel_acesso) 
-      };
-      const res = await fetch(`${API_URL}/usuarios`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(payload) });
+      const res = await fetch(`${API_URL}/usuarios`, { method: 'POST', headers: getHeaders(), body: JSON.stringify({ ...novoUsuario, departamento_nome: deptAlvo, nivel_acesso: parseInt(novoUsuario.nivel_acesso) }) });
       const data = await res.json();
-      if (res.ok) {
-        mostrarNotificacao(data.mensagem || "Usuário cadastrado com sucesso!", "sucesso");
-        setNovoUsuario({ nome: '', usuario: '', senha: '', cargo: '', departamento_nome: '', nivel_acesso: 2 });
-        carregarDados();
-      } else {
-        mostrarNotificacao(data.detail, "erro");
+      if (res.ok) { 
+        mostrarNotificacao(data.mensagem || "Usuário cadastrado!"); 
+        setNovoUsuario({ nome: '', usuario: '', senha: '', cargo: '', departamento_nome: '', nivel_acesso: 2 }); 
+        carregarDados(); 
+      } else { 
+        mostrarNotificacao(data.detail, "erro"); 
       }
-    } catch (err) { mostrarNotificacao("Erro ao registrar usuário.", "erro"); }
+    } catch (err) { mostrarNotificacao("Erro ao cadastrar.", "erro"); }
   };
 
   const handleCadastrarItem = async (e) => {
     e.preventDefault();
     try {
-      const payload = { ...novoItem, quantidade: parseInt(novoItem.quantidade), quantidade_minima: parseInt(novoItem.quantidade_minima) };
-      const res = await fetch(`${API_URL}/estoque`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(payload) });
-      if (res.ok) {
-        mostrarNotificacao("Item cadastrado!", "sucesso");
-        setNovoItem({ nome: '', categoria: '', quantidade: '', quantidade_minima: '0', localizacao: '' });
-        carregarDados();
-      } else {
-        mostrarNotificacao("Erro ao cadastrar material.", "erro");
+      const res = await fetch(`${API_URL}/estoque`, { method: 'POST', headers: getHeaders(), body: JSON.stringify({ ...novoItem, quantidade: parseInt(novoItem.quantidade), quantidade_minima: parseInt(novoItem.quantidade_minima) }) });
+      if (res.ok) { 
+        mostrarNotificacao("Item adicionado ao estoque!"); 
+        setNovoItem({ nome: '', categoria: '', quantidade: '', quantidade_minima: '0', localizacao: '' }); 
+        carregarDados(); 
+      } else { 
+        mostrarNotificacao("Erro ao cadastrar item.", "erro"); 
       }
     } catch (err) { mostrarNotificacao("Erro de conexão!", "erro"); }
   };
 
   const handleCadastrarSaida = async (e) => {
     e.preventDefault();
-    const itemSelecionado = itens.find(i => i.id.toString() === novaSaida.item_id);
-    if (!itemSelecionado) return mostrarNotificacao("Selecione um item.", "erro");
-    if (parseInt(novaSaida.quantidade) > itemSelecionado.quantidade) return mostrarNotificacao("Estoque insuficiente.", "erro");
-
+    const item = itens.find(i => i.id.toString() === novaSaida.item_id);
+    if (!item) return mostrarNotificacao("Selecione um item.", "erro");
+    if (parseInt(novaSaida.quantidade) > item.quantidade) return mostrarNotificacao("Estoque insuficiente.", "erro");
     try {
-      const payload = { item_id: parseInt(novaSaida.item_id), quantidade: parseInt(novaSaida.quantidade), projeto: novaSaida.projeto, tipo: 'saida', data: new Date().toISOString() };
-      const res = await fetch(`${API_URL}/movimentacoes`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(payload) });
-      if (res.ok) {
-        mostrarNotificacao("Saída registrada!", "sucesso");
-        setNovaSaida({ item_id: '', quantidade: '', projeto: '' });
-        carregarDados();
-      } else {
-        const err = await res.json();
-        mostrarNotificacao(err.detail, "erro");
+      const res = await fetch(`${API_URL}/movimentacoes`, { method: 'POST', headers: getHeaders(), body: JSON.stringify({ item_id: parseInt(novaSaida.item_id), quantidade: parseInt(novaSaida.quantidade), projeto: novaSaida.projeto, tipo: 'saida', data: new Date().toISOString() }) });
+      if (res.ok) { 
+        mostrarNotificacao("Saída registrada!"); 
+        setNovaSaida({ item_id: '', quantidade: '', projeto: '' }); 
+        carregarDados(); 
+      } else { 
+        const err = await res.json(); mostrarNotificacao(err.detail, "erro"); 
       }
-    } catch (err) { mostrarNotificacao("Erro de conexão!", "erro"); }
+    } catch (err) { mostrarNotificacao("Erro!", "erro"); }
   };
 
   const handleSalvarEdicao = async (e) => {
@@ -239,22 +230,22 @@ function App() {
     try {
       const payload = { ...itemEditando, quantidade: parseInt(itemEditando.quantidade), quantidade_minima: parseInt(itemEditando.quantidade_minima) };
       delete payload.departamentos; 
-      
       const res = await fetch(`${API_URL}/estoque/${itemEditando.id}`, { method: 'PUT', headers: getHeaders(), body: JSON.stringify(payload) });
-      if (res.ok) {
-        mostrarNotificacao("Material atualizado!", "sucesso");
-        setItemEditando(null); carregarDados();
-      } else {
-        const err = await res.json(); mostrarNotificacao(err.detail, "erro");
+      if (res.ok) { 
+        mostrarNotificacao("Material atualizado!"); 
+        setItemEditando(null); 
+        carregarDados(); 
+      } else { 
+        const err = await res.json(); mostrarNotificacao(err.detail, "erro"); 
       }
-    } catch (err) { mostrarNotificacao("Erro de conexão!", "erro"); }
+    } catch (err) { mostrarNotificacao("Erro!", "erro"); }
   };
 
   const confirmarExclusao = async () => {
     if (!itemParaExcluir) return;
     try {
       const res = await fetch(`${API_URL}/estoque/${itemParaExcluir.id}`, { method: 'DELETE', headers: getHeaders() });
-      if (res.ok) { mostrarNotificacao("Item removido!", "sucesso"); carregarDados(); } 
+      if (res.ok) { mostrarNotificacao("Item removido!"); carregarDados(); } 
       else { const err = await res.json(); mostrarNotificacao(err.detail, "erro"); }
     } catch (err) { mostrarNotificacao("Erro ao excluir.", "erro"); }
     setItemParaExcluir(null);
@@ -264,48 +255,55 @@ function App() {
     e.preventDefault();
     if (modalSolicitar.quantidade > modalSolicitar.item.quantidade) return mostrarNotificacao("Quantidade maior que a disponível.", "erro");
     try {
-      const payload = { item_id: modalSolicitar.item.id, quantidade: parseInt(modalSolicitar.quantidade), dept_solicitado_id: modalSolicitar.item.departamento_id };
-      const res = await fetch(`${API_URL}/solicitacoes`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(payload) });
-      if (res.ok) {
-        mostrarNotificacao("Solicitação enviada!", "sucesso");
-        setModalSolicitar({ visivel: false, item: null, quantidade: 1 });
-        carregarDados();
-      } else { const err = await res.json(); mostrarNotificacao(err.detail, "erro"); }
+      const res = await fetch(`${API_URL}/solicitacoes`, { method: 'POST', headers: getHeaders(), body: JSON.stringify({ item_id: modalSolicitar.item.id, quantidade: parseInt(modalSolicitar.quantidade), dept_solicitado_id: modalSolicitar.item.departamento_id }) });
+      if (res.ok) { 
+        mostrarNotificacao("Solicitação enviada com sucesso!"); 
+        setModalSolicitar({ visivel: false, item: null, quantidade: 1 }); 
+        carregarDados(); 
+      } else { 
+        const err = await res.json(); mostrarNotificacao(err.detail, "erro"); 
+      }
     } catch (err) { mostrarNotificacao("Erro!", "erro"); }
   };
 
   const responderSolicitacao = async (id, status) => {
     try {
       const res = await fetch(`${API_URL}/solicitacoes/${id}/responder`, { method: 'PUT', headers: getHeaders(), body: JSON.stringify({ status }) });
-      if (res.ok) { mostrarNotificacao(`Solicitação ${status}!`, "sucesso"); carregarDados(); } 
+      if (res.ok) { mostrarNotificacao(`Solicitação ${status}!`); carregarDados(); } 
       else { const err = await res.json(); mostrarNotificacao(err.detail, "erro"); }
     } catch (err) { mostrarNotificacao("Erro!", "erro"); }
   };
 
+  // --- MÉTODOS DE FILTRO E ESTATÍSTICA ---
   const categoriasUnicas = [...new Set(itens.map(i => i.categoria))];
   const projetosUnicos = [...new Set(saidas.map(s => s.projeto).filter(Boolean))];
-
   const itensFiltrados = itens.filter(item => item.nome.toLowerCase().includes(busca.toLowerCase()) && (filtroCategoria === '' || item.categoria === filtroCategoria));
-  const obterNomeItem = (item_id) => { const it = itens.find(i => i.id === item_id); return it ? it.nome : `ID ${item_id}`; };
+  const obterNomeItem = (id) => { const it = itens.find(i => i.id === id); return it ? it.nome : `Item ID ${id}`; };
   const saidasFiltradas = saidas.filter(s => obterNomeItem(s.item_id).toLowerCase().includes(buscaSaida.toLowerCase()) && (filtroProjeto === '' || s.projeto === filtroProjeto));
-
   const itensAtuais = itensFiltrados.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
   const totalPaginas = Math.ceil(itensFiltrados.length / itensPorPagina);
 
+  const estatisticasProjetos = () => {
+    const totais = {}; let totalGeral = 0;
+    saidas.forEach(s => { const proj = s.projeto || 'Sem Projeto'; totais[proj] = (totais[proj] || 0) + s.quantidade; totalGeral += s.quantidade; });
+    return Object.keys(totais).map(p => ({ projeto: p, quantidade: totais[p], porcentagem: totalGeral > 0 ? ((totais[p] / totalGeral) * 100).toFixed(1) : 0 })).sort((a,b) => b.quantidade - a.quantidade);
+  };
+
   const nivelUsuario = user ? parseInt(user.nivel_acesso) : 2;
+  const qtdSolicitacoesPendentes = solicitacoes.filter(s => s.dept_solicitado_id === user?.departamento_id && s.status === 'pendente').length;
 
   if (!user) {
     return (
       <>
         <NotificacaoUI />
-        <div style={{ backgroundColor: CORES.roxoClaro, height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', boxSizing: 'border-box' }}>
-          <div style={{ backgroundColor: CORES.branco, padding: '40px 30px', borderRadius: '15px', boxShadow: '0 4px 15px rgba(0,0,0,0.2)', textAlign: 'center', width: '100%', maxWidth: '380px' }}>
-            <img src="/logo-territorio.png" alt="Logo Territorio" style={{ width: '130px', marginBottom: '15px' }} />
-            <h2 style={{ color: CORES.roxoEscuro, margin: '0 0 5px 0', fontSize: '22px' }}>Acesso ao Sistema</h2>
-            <p style={{ color: CORES.roxoMedio, marginBottom: '25px', marginTop: 0, fontSize: '14px' }}>Território do Fazer</p>
+        <div style={{ backgroundColor: CORES.roxoClaro, height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
+          <div style={{ backgroundColor: CORES.branco, padding: '40px 30px', borderRadius: '15px', textAlign: 'center', width: '100%', maxWidth: '380px', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}>
+            <img src="/logo-territorio.png" alt="Logo" style={{ width: '130px', marginBottom: '15px' }} />
+            <h2 style={{ color: CORES.roxoEscuro, margin: '0 0 5px 0' }}>Acesso ao Sistema</h2>
+            <p style={{ color: CORES.roxoMedio, marginBottom: '25px', marginTop: 0 }}>Território do Fazer</p>
             <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <input type="text" required placeholder="Usuário" style={{...styles.input, marginBottom: 0}} onChange={e => setLoginForm({...loginForm, usuario: e.target.value})} />
-              <input type="password" required placeholder="Senha" style={{...styles.input, marginBottom: 0}} onChange={e => setLoginForm({...loginForm, senha: e.target.value})} />
+              <input type="text" required placeholder="Usuário" style={styles.input} onChange={e => setLoginForm({...loginForm, usuario: e.target.value})} />
+              <input type="password" required placeholder="Senha" style={styles.input} onChange={e => setLoginForm({...loginForm, senha: e.target.value})} />
               <button type="submit" style={styles.btnPrincipal}>ENTRAR</button>
             </form>
           </div>
@@ -321,40 +319,38 @@ function App() {
         
         {isMobile && menuAberto && <div onClick={() => setMenuAberto(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 998 }} />}
 
-        <div style={{ width: '260px', backgroundColor: CORES.roxoEscuro, color: CORES.branco, display: 'flex', flexDirection: 'column', padding: '20px', position: isMobile ? 'fixed' : 'relative', height: '100%', top: 0, left: isMobile ? (menuAberto ? '0' : '-260px') : '0', transition: 'left 0.3s ease', zIndex: 999, boxSizing: 'border-box' }}>
+        <div style={{ width: '260px', backgroundColor: CORES.roxoEscuro, color: CORES.branco, display: 'flex', flexDirection: 'column', padding: '20px', position: isMobile ? 'fixed' : 'relative', height: '100%', top: 0, left: isMobile ? (menuAberto ? '0' : '-260px') : '0', transition: 'left 0.3s ease', zIndex: 999 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${CORES.roxoMedio}`, paddingBottom: '10px', marginBottom: '20px' }}>
-            <h3 style={{ fontSize: '18px', margin: 0 }}>MENU</h3>
+            <h3 style={{ margin: 0 }}>MENU</h3>
             {isMobile && <button onClick={() => setMenuAberto(false)} style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '20px' }}>✖</button>}
           </div>
           
-          <button onClick={() => mudarView('estoque')} style={{...styles.navBtn, backgroundColor: view === 'estoque' ? CORES.roxoMedio : 'transparent'}}>📦 Ver Estoque Geral</button>
+          <button onClick={() => mudarView('estoque')} style={{...styles.navBtn, backgroundColor: view === 'estoque' ? CORES.roxoMedio : 'transparent'}}>📦 Estoque Geral</button>
           
-          <button onClick={() => mudarView('solicitacoes')} style={{...styles.navBtn, backgroundColor: view === 'solicitacoes' ? CORES.roxoMedio : 'transparent', position: 'relative'}}>
-            📥 Solicitações
-            {solicitacoes.filter(s => s.dept_solicitado_id === user.departamento_id && s.status === 'pendente').length > 0 && (
-              <span style={{background: 'red', color: 'white', borderRadius: '50%', padding: '2px 6px', fontSize: '12px', marginLeft: '8px'}}>
-                {solicitacoes.filter(s => s.dept_solicitado_id === user.departamento_id && s.status === 'pendente').length}
-              </span>
-            )}
+          <button onClick={() => mudarView('solicitacoes')} style={{...styles.navBtn, backgroundColor: view === 'solicitacoes' ? CORES.roxoMedio : 'transparent'}}>
+            <span>📥 Solicitações</span>
+            {qtdSolicitacoesPendentes > 0 && <span style={{background: 'red', color: 'white', borderRadius: '50%', padding: '2px 6px', fontSize: '11px'}}>{qtdSolicitacoesPendentes}</span>}
           </button>
           
           <button onClick={() => mudarView('gerenciar')} style={{...styles.navBtn, backgroundColor: view === 'gerenciar' ? CORES.roxoMedio : 'transparent'}}>➕ Novo Material</button>
           <button onClick={() => mudarView('nova_saida')} style={{...styles.navBtn, backgroundColor: view === 'nova_saida' ? CORES.roxoMedio : 'transparent'}}>📤 Registrar Saída</button>
-          <button onClick={() => mudarView('historico_saidas')} style={{...styles.navBtn, backgroundColor: view === 'historico_saidas' ? CORES.roxoMedio : 'transparent'}}>📊 Histórico {nivelUsuario === 0 ? '(Geral)' : '(Meu Dept.)'}</button>
+          <button onClick={() => mudarView('projetos_graficos')} style={{...styles.navBtn, backgroundColor: view === 'projetos_graficos' ? CORES.roxoMedio : 'transparent'}}>📊 Dashboard Projetos</button>
           
-          {/* Apenas Níveis 0 e 1 podem acessar o painel de criação de usuários */}
+          <div style={{ height: '1px', backgroundColor: CORES.roxoMedio, margin: '10px 0' }} />
+          
+          {nivelUsuario === 0 && (
+            <button onClick={() => mudarView('auditoria')} style={{...styles.navBtn, backgroundColor: view === 'auditoria' ? CORES.roxoMedio : 'transparent'}}>📜 Log Global</button>
+          )}
+
           {(nivelUsuario === 0 || nivelUsuario === 1) && (
-            <>
-              <div style={{ height: '1px', backgroundColor: CORES.roxoMedio, margin: '10px 0' }} />
-              <button onClick={() => mudarView('configs')} style={{...styles.navBtn, backgroundColor: view === 'configs' ? CORES.roxoMedio : 'transparent'}}>👥 Gerenciar Usuários</button>
-            </>
+            <button onClick={() => mudarView('configs')} style={{...styles.navBtn, backgroundColor: view === 'configs' ? CORES.roxoMedio : 'transparent'}}>👥 Controle Usuários</button>
           )}
           
           <div style={{ marginTop: 'auto', borderTop: `1px solid ${CORES.roxoMedio}`, paddingTop: '10px' }}>
             <p style={{ fontWeight: 'bold', margin: '0 0 4px 0' }}>{user.nome}</p>
             <p style={{ fontSize: '12px', color: CORES.roxoClaro, margin: '0 0 4px 0' }}>{getNomeNivel(nivelUsuario)}</p>
-            <p style={{ fontSize: '11px', color: '#ddd', margin: 0 }}>Dept ID: {user.departamento_id}</p>
-            <button onClick={deslogar} style={{ ...styles.btnPrincipal, backgroundColor: CORES.laranja, color: 'black', width: '100%', marginTop: '10px' }}>Sair</button>
+            <p style={{ fontSize: '11px', color: '#ddd', margin: 0 }}>Dept: {getNomeDepartamento(user.departamento_id)}</p>
+            <button onClick={deslogar} style={{ ...styles.btnPrincipal, backgroundColor: CORES.laranja, marginTop: '10px' }}>Sair</button>
           </div>
         </div>
 
@@ -362,16 +358,16 @@ function App() {
           
           <div style={{ height: '80px', minHeight: '80px', backgroundColor: CORES.branco, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: isMobile ? '0 10px' : '0 30px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              {isMobile && <button onClick={() => setMenuAberto(true)} style={{ background: 'transparent', border: 'none', fontSize: '26px', marginRight: '10px', color: CORES.roxoEscuro }}>☰</button>}
+              {isMobile && <button onClick={() => setMenuAberto(true)} style={{ background: 'transparent', border: 'none', fontSize: '26px', marginRight: '10px' }}>☰</button>}
               <img src="/logo-territorio.png" alt="Logo" style={{ height: isMobile ? '35px' : '50px' }} />
             </div>
-            <h2 style={{ color: CORES.roxoEscuro, fontSize: isMobile ? '14px' : '20px', textAlign: 'center', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Controle de Materiais</h2>
-            <img src="/logo-instituto.png" alt="Logo Instituto" style={{ height: isMobile ? '25px' : '40px' }} />
+            <h2 style={{ color: CORES.roxoEscuro, fontSize: isMobile ? '14px' : '20px', flex: 1, textAlign: 'center' }}>Controle de Materiais</h2>
+            <img src="/logo-instituto.png" alt="Logo" style={{ height: isMobile ? '25px' : '40px' }} />
           </div>
 
-          <div style={{ padding: isMobile ? '15px' : '30px', overflowY: 'auto', height: 'calc(100vh - 80px)', boxSizing: 'border-box' }}>
+          <div style={{ padding: isMobile ? '15px' : '30px', overflowY: 'auto', height: 'calc(100vh - 80px)' }}>
             
-            {/* 1. TELA DE ESTOQUE */}
+            {/* 1. TELA DE ESTOQUE GERAL */}
             {view === 'estoque' && (
               <div>
                 <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', marginBottom: '20px', gap: '15px' }}>
@@ -386,7 +382,7 @@ function App() {
                   </div>
                 </div>
 
-                <div style={{ overflowX: 'auto', backgroundColor: 'white', borderRadius: '5px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
+                <div style={{ overflowX: 'auto', backgroundColor: 'white', borderRadius: '5px' }}>
                   <table style={styles.table}>
                     <thead>
                       <tr style={{ backgroundColor: CORES.roxoMedio, color: 'white' }}>
@@ -399,19 +395,19 @@ function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {itensAtuais.length > 0 ? itensAtuais.map(i => {
+                      {itensAtuais.map(i => {
+                        const meuDept = i.departamento_id === user.departamento_id;
+                        const podeEditar = meuDept || nivelUsuario === 0;
+                        const podeExcluir = (meuDept && nivelUsuario <= 1) || nivelUsuario === 0;
                         const isAlerta = i.quantidade <= i.quantidade_minima;
-                        const pertenceMeuDept = i.departamento_id === user.departamento_id;
-                        const podeEditar = pertenceMeuDept || nivelUsuario === 0;
-                        const podeExcluir = (pertenceMeuDept && nivelUsuario <= 1) || nivelUsuario === 0;
-                        
+
                         return (
-                        <tr key={i.id} style={{ borderBottom: '1px solid #eee', textAlign: 'center', backgroundColor: isAlerta ? '#fff9f9' : 'white' }}>
+                        <tr key={i.id} style={{ textAlign: 'center', borderBottom: '1px solid #eee', backgroundColor: isAlerta ? '#fff9f9' : 'white' }}>
                           <td style={{ padding: '12px' }}>{i.id}</td>
                           <td style={{ padding: '12px', textAlign: 'left' }}>{i.nome}</td>
                           <td style={{ padding: '12px' }}>{i.categoria}</td>
-                          <td style={{ padding: '12px', fontSize: '12px', color: '#7f8c8d' }}>{i.departamentos?.nome || `Dept ${i.departamento_id}`}</td>
-                          <td style={{ padding: '12px', fontWeight: 'bold', color: isAlerta ? CORES.vermelho : 'black' }}>
+                          <td style={{ padding: '12px' }}>{i.departamentos?.nome || getNomeDepartamento(i.departamento_id)}</td>
+                          <td style={{ padding: '12px', color: isAlerta ? 'red' : 'black', fontWeight: 'bold' }}>
                             {i.quantidade} {isAlerta && <span title="Estoque Mínimo Atingido!">⚠️</span>}
                           </td>
                           <td style={{ padding: '12px' }}>
@@ -425,7 +421,7 @@ function App() {
                             )}
                           </td>
                         </tr>
-                      )}) : <tr><td colSpan="6" style={{ padding: '20px', textAlign: 'center' }}>Vazio.</td></tr>}
+                      )})}
                     </tbody>
                   </table>
                 </div>
@@ -433,23 +429,25 @@ function App() {
                 {totalPaginas > 1 && (
                   <div style={{ display: 'flex', alignItems: 'center', marginTop: '20px', gap: '10px', justifyContent: 'center' }}>
                     <button onClick={() => setPaginaAtual(paginaAtual - 1)} disabled={paginaAtual === 1} style={{ ...styles.btnPrincipal, width: 'auto', padding: '10px 15px' }}>Anterior</button>
-                    <span style={{ color: CORES.roxoEscuro, fontWeight: 'bold' }}>Pág. {paginaAtual}</span>
+                    <span style={{ color: CORES.roxoEscuro, fontWeight: 'bold' }}>Pág. {paginaAtual} de {totalPaginas}</span>
                     <button onClick={() => setPaginaAtual(paginaAtual + 1)} disabled={paginaAtual === totalPaginas} style={{ ...styles.btnPrincipal, width: 'auto', padding: '10px 15px' }}>Próxima</button>
                   </div>
                 )}
               </div>
             )}
 
-            {/* 2. TELA DE SOLICITAÇÕES */}
+            {/* 2. TELA DE CAIXA DE SOLICITAÇÕES */}
             {view === 'solicitacoes' && (
               <div>
                 <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Caixa de Solicitações entre Departamentos</h3>
-                <div style={{ overflowX: 'auto', backgroundColor: 'white', borderRadius: '5px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
+                <div style={{ overflowX: 'auto', backgroundColor: 'white', borderRadius: '5px' }}>
                   <table style={styles.table}>
                     <thead>
                       <tr style={{ background: CORES.marrom, color: 'white' }}>
-                        <th style={{ padding: '12px' }}>Item</th>
-                        <th style={{ padding: '12px' }}>Tipo</th>
+                        <th style={{ padding: '12px' }}>Material Solicitado</th>
+                        <th style={{ padding: '12px' }}>Quem Pediu?</th>
+                        <th style={{ padding: '12px' }}>De (Origem)</th>
+                        <th style={{ padding: '12px' }}>Para (Destino)</th>
                         <th style={{ padding: '12px' }}>Qtd</th>
                         <th style={{ padding: '12px' }}>Status</th>
                         <th style={{ padding: '12px' }}>Ações</th>
@@ -458,31 +456,31 @@ function App() {
                     <tbody>
                       {solicitacoes.length > 0 ? solicitacoes.map(s => {
                         const recebida = s.dept_solicitado_id === user.departamento_id;
-                        const nomeItem = itens.find(i => i.id === s.item_id)?.nome || `Item ${s.item_id}`;
-                        // Apenas Nível 0 e Nível 1 podem aprovar/rejeitar solicitações recebidas
-                        const podeAprovarRejeitar = (nivelUsuario === 0 || (nivelUsuario === 1 && recebida)) && s.status === 'pendente';
-
+                        const podeAprovar = (nivelUsuario === 0 || (nivelUsuario === 1 && recebida)) && s.status === 'pendente';
+                        
                         return (
                           <tr key={s.id} style={{ textAlign: 'center', borderBottom: '1px solid #eee' }}>
-                            <td style={{ padding: '12px' }}>{nomeItem}</td>
-                            <td style={{ padding: '12px' }}><b>{recebida ? '↙️ Recebida' : '↗️ Enviada'}</b></td>
+                            <td style={{ padding: '12px', fontWeight: 'bold', color: CORES.roxoEscuro }}>{obterNomeItem(s.item_id)}</td>
+                            <td style={{ padding: '12px' }}>{s.usuarios?.nome || 'Usuário'}</td>
+                            <td style={{ padding: '12px' }}>{getNomeDepartamento(s.dept_solicitado_id)}</td>
+                            <td style={{ padding: '12px' }}>{getNomeDepartamento(s.dept_solicitante_id)}</td>
                             <td style={{ padding: '12px', fontWeight: 'bold' }}>{s.quantidade} un.</td>
                             <td style={{ padding: '12px', fontWeight: 'bold', color: s.status === 'pendente' ? 'orange' : s.status === 'aprovado' ? 'green' : 'red' }}>
                               {s.status.toUpperCase()}
                             </td>
                             <td style={{ padding: '12px' }}>
-                              {podeAprovarRejeitar ? (
+                              {podeAprovar ? (
                                 <>
                                   <button style={{...styles.btnEditar, backgroundColor: CORES.verde}} onClick={() => responderSolicitacao(s.id, 'aprovado')}>Aprovar</button>
                                   <button style={{...styles.btnExcluir, backgroundColor: CORES.vermelho}} onClick={() => responderSolicitacao(s.id, 'rejeitado')}>Rejeitar</button>
                                 </>
                               ) : (
-                                <span style={{ fontSize: '13px', color: '#999' }}>{s.status !== 'pendente' ? 'Finalizado' : 'Aguardando Aprovação'}</span>
+                                <span style={{ fontSize: '12px', color: '#999' }}>{s.status !== 'pendente' ? 'Finalizado' : 'Aguardando Aprovação'}</span>
                               )}
                             </td>
                           </tr>
                         )
-                      }) : <tr><td colSpan="5" style={{ padding: '20px', textAlign: 'center' }}>Nenhuma solicitação encontrada.</td></tr>}
+                      }) : <tr><td colSpan="7" style={{ padding: '20px', textAlign: 'center' }}>Nenhuma solicitação encontrada.</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -495,7 +493,9 @@ function App() {
                 <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Adicionar Novo Material (Ao seu Dept.)</h3>
                 <div style={styles.formCard}>
                   <form onSubmit={handleCadastrarItem}>
-                    <label>Nome do Item</label><input type="text" required style={styles.input} value={novoItem.nome} onChange={e => setNovoItem({...novoItem, nome: e.target.value})} />
+                    <label>Nome do Item</label>
+                    <input type="text" required style={styles.input} value={novoItem.nome} onChange={e => setNovoItem({...novoItem, nome: e.target.value})} />
+                    
                     <label>Categoria</label>
                     <input type="text" required style={styles.input} list="cat-list" value={novoItem.categoria} onChange={e => setNovoItem({...novoItem, categoria: e.target.value})} />
                     <datalist id="cat-list">{categoriasUnicas.map(c => <option key={c} value={c} />)}</datalist>
@@ -505,7 +505,9 @@ function App() {
                       <div style={{ flex: 1 }}><label>Alerta Mínimo</label><input type="number" required min="0" style={styles.input} value={novoItem.quantidade_minima} onChange={e => setNovoItem({...novoItem, quantidade_minima: e.target.value})} /></div>
                     </div>
                     
-                    <label>Localização Física</label><input type="text" required style={styles.input} value={novoItem.localizacao} onChange={e => setNovoItem({...novoItem, localizacao: e.target.value})} />
+                    <label>Localização Física</label>
+                    <input type="text" required style={styles.input} value={novoItem.localizacao} onChange={e => setNovoItem({...novoItem, localizacao: e.target.value})} />
+                    
                     <button type="submit" style={{...styles.btnPrincipal, marginTop: '10px'}}>Salvar no Estoque</button>
                   </form>
                 </div>
@@ -539,47 +541,94 @@ function App() {
               </div>
             )}
 
-            {/* 5. TELA DE HISTÓRICO */}
-            {view === 'historico_saidas' && (
+            {/* 5. DASHBOARD DE PROJETOS E HISTÓRICO DE SAÍDAS */}
+            {view === 'projetos_graficos' && (
               <div>
-                <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Histórico de Movimentações {nivelUsuario === 0 ? '(Geral)' : '(Meu Departamento)'}</h3>
-                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '15px' }}>
-                  <input type="text" placeholder="Buscar material..." style={{...styles.input, marginBottom: 0, width: isMobile ? '100%' : '200px'}} value={buscaSaida} onChange={(e) => setBuscaSaida(e.target.value)} />
-                  <select style={{...styles.input, marginBottom: 0, width: isMobile ? 'calc(100% - 110px)' : '200px'}} value={filtroProjeto} onChange={(e) => setFiltroProjeto(e.target.value)}>
-                    <option value="">Todos os Projetos</option>
-                    {projetosUnicos.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                  <button onClick={handleBaixarPDFSaidas} style={{...styles.btnPrincipal, width: 'auto', backgroundColor: CORES.roxoEscuro, color: 'white'}}>📄 PDF</button>
+                <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Dashboard de Projetos e Consumo</h3>
+                
+                {/* GRÁFICO VISUAL DE BARRAS */}
+                <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', marginBottom: '30px' }}>
+                  <h4 style={{ margin: '0 0 15px 0', color: CORES.roxoMedio }}>Percentual de Consumo por Projeto</h4>
+                  {estatisticasProjetos().length > 0 ? estatisticasProjetos().map((est, idx) => (
+                    <div key={idx} style={{ marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 'bold', marginBottom: '4px' }}>
+                        <span>{est.projeto}</span>
+                        <span>{est.porcentagem}% ({est.quantidade} itens)</span>
+                      </div>
+                      <div style={{ width: '100%', backgroundColor: '#ecf0f1', borderRadius: '10px', height: '14px', overflow: 'hidden' }}>
+                        <div style={{ width: `${est.porcentagem}%`, backgroundColor: CORES.laranja, height: '100%', transition: 'width 1s ease-in-out' }} />
+                      </div>
+                    </div>
+                  )) : <p style={{ fontSize: '14px', color: '#7f8c8d' }}>Nenhuma saída registrada ainda.</p>}
                 </div>
 
-                <div style={{ overflowX: 'auto', backgroundColor: 'white', borderRadius: '5px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                  <h4 style={{ margin: 0, color: CORES.roxoEscuro }}>Tabela de Registros de Movimentação</h4>
+                  <button onClick={handleBaixarPDFSaidas} style={{...styles.btnPrincipal, width: 'auto', backgroundColor: CORES.roxoEscuro, color: 'white'}}>📄 Exportar PDF</button>
+                </div>
+
+                <div style={{ overflowX: 'auto', backgroundColor: 'white', borderRadius: '5px' }}>
                   <table style={styles.table}>
                     <thead>
                       <tr style={{ backgroundColor: CORES.laranja, color: 'black' }}>
-                        <th style={{ padding: '12px' }}>Data</th><th style={{ padding: '12px' }}>Projeto</th><th style={{ padding: '12px' }}>Material</th><th style={{ padding: '12px' }}>Usuário / Dept.</th><th style={{ padding: '12px' }}>Qtd</th>
+                        <th style={{ padding: '12px' }}>Data</th>
+                        <th style={{ padding: '12px' }}>Projeto</th>
+                        <th style={{ padding: '12px' }}>Material</th>
+                        <th style={{ padding: '12px' }}>Usuário / Dept.</th>
+                        <th style={{ padding: '12px' }}>Qtd</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {saidasFiltradas.length > 0 ? saidasFiltradas.map((s, idx) => (
+                      {saidas.length > 0 ? saidas.map((s, idx) => (
                         <tr key={idx} style={{ borderBottom: '1px solid #eee', textAlign: 'center' }}>
                           <td style={{ padding: '12px' }}>{s.data ? new Date(s.data).toLocaleDateString('pt-BR') : '-'}</td>
                           <td style={{ padding: '12px', fontWeight: 'bold', color: CORES.roxoEscuro }}>{s.projeto}</td>
                           <td style={{ padding: '12px', textAlign: 'left' }}>{obterNomeItem(s.item_id)}</td>
-                          <td style={{ padding: '12px', fontSize: '12px' }}>{s.usuarios?.nome || 'Admin'} <br/><span style={{color: '#7f8c8d'}}>({s.departamentos?.nome || `Dept ${s.departamento_id}`})</span></td>
+                          <td style={{ padding: '12px', fontSize: '12px' }}>{s.usuarios?.nome || 'Usuário'} <br/><span style={{color: '#7f8c8d'}}>({s.departamentos?.nome || getNomeDepartamento(s.departamento_id)})</span></td>
                           <td style={{ padding: '12px', fontWeight: 'bold', color: CORES.vermelho }}>- {s.quantidade}</td>
                         </tr>
-                      )) : <tr><td colSpan="5" style={{ padding: '20px', textAlign: 'center' }}>Nenhum registro.</td></tr>}
+                      )) : <tr><td colSpan="5" style={{ padding: '20px', textAlign: 'center' }}>Nenhum registro encontrado.</td></tr>}
                     </tbody>
                   </table>
                 </div>
               </div>
             )}
 
-            {/* 6. TELA DE GERENCIAR USUÁRIOS (Níveis 0 e 1) */}
+            {/* 6. TELA DE LOG GLOBAL DE AUDITORIA (Nível 0) */}
+            {view === 'auditoria' && nivelUsuario === 0 && (
+              <div>
+                <h3 style={{ color: CORES.roxoEscuro, marginBottom: '10px' }}>Log Global de Auditoria</h3>
+                <p style={{ color: '#7f8c8d', marginBottom: '20px', fontSize: '14px' }}>Histórico em tempo real de todas as ações executadas no sistema por todos os usuários.</p>
+                <div style={{ overflowX: 'auto', backgroundColor: 'white', borderRadius: '5px' }}>
+                  <table style={styles.table}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#2c3e50', color: 'white' }}>
+                        <th style={{ padding: '12px' }}>Data / Hora</th>
+                        <th style={{ padding: '12px' }}>Usuário</th>
+                        <th style={{ padding: '12px' }}>Departamento</th>
+                        <th style={{ padding: '12px' }}>Ação Executada</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {auditoria.length > 0 ? auditoria.map(a => (
+                        <tr key={a.id} style={{ borderBottom: '1px solid #eee', textAlign: 'center', fontSize: '14px' }}>
+                          <td style={{ padding: '12px' }}>{new Date(a.data).toLocaleString('pt-BR')}</td>
+                          <td style={{ padding: '12px', fontWeight: 'bold' }}>{a.usuario}</td>
+                          <td style={{ padding: '12px', color: '#7f8c8d' }}>{a.departamento}</td>
+                          <td style={{ padding: '12px', textAlign: 'left' }}>{a.acao}</td>
+                        </tr>
+                      )) : <tr><td colSpan="4" style={{ padding: '20px', textAlign: 'center' }}>Nenhuma atividade registrada no log.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* 7. GERENCIAMENTO DE USUÁRIOS (Níveis 0 e 1) */}
             {view === 'configs' && (nivelUsuario === 0 || nivelUsuario === 1) && (
               <div>
                 <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>
-                  Gerenciar Usuários {nivelUsuario === 0 ? '(Acesso Geral)' : '(Meu Departamento)'}
+                  Cadastrar Usuário {nivelUsuario === 0 ? '(Nível Geral)' : '(No Seu Departamento)'}
                 </h3>
                 <div style={styles.formCard}>
                   <form onSubmit={handleCadastrarUsuario}>
@@ -587,32 +636,31 @@ function App() {
                     <input type="text" required style={styles.input} value={novoUsuario.nome} onChange={e => setNovoUsuario({...novoUsuario, nome: e.target.value})} />
                     
                     <label>Cargo / Função</label>
-                    <input type="text" placeholder="Ex: Monitor de Laboratório" required style={styles.input} value={novoUsuario.cargo} onChange={e => setNovoUsuario({...novoUsuario, cargo: e.target.value})} />
+                    <input type="text" placeholder="Ex: Monitor de Robótica" required style={styles.input} value={novoUsuario.cargo} onChange={e => setNovoUsuario({...novoUsuario, cargo: e.target.value})} />
                     
-                    {/* Se for Nível 0, escolhe o departamento; Se for Nível 1, fica fixado no departamento dele */}
                     {nivelUsuario === 0 ? (
                       <>
                         <label>Departamento (Digite para criar ou escolher)</label>
-                        <input type="text" required style={styles.input} list="depts-list" value={novoUsuario.departamento_nome} onChange={e => setNovoUsuario({...novoUsuario, departamento_nome: e.target.value})} placeholder="Ex: Robótica" />
+                        <input type="text" required style={styles.input} list="depts-list" value={novoUsuario.departamento_nome} onChange={e => setNovoUsuario({...novoUsuario, departamento_nome: e.target.value})} placeholder="Ex: Mecânica" />
                         <datalist id="depts-list">{departamentos.map(d => <option key={d.id} value={d.nome} />)}</datalist>
                       </>
                     ) : (
-                      <p style={{ fontSize: '14px', color: '#555', backgroundColor: '#eee', padding: '10px', borderRadius: '5px' }}>
-                        Departamento: <b>{departamentos.find(d => d.id === user.departamento_id)?.nome || `Dept ${user.departamento_id}`}</b> (Fixo)
+                      <p style={{ fontSize: '14px', color: '#555', backgroundColor: '#eee', padding: '10px', borderRadius: '5px', marginBottom: '15px' }}>
+                        Departamento: <b>{getNomeDepartamento(user.departamento_id)}</b> (Fixo)
                       </p>
                     )}
 
                     <label>Nível de Acesso</label>
                     <select style={styles.input} value={novoUsuario.nivel_acesso} onChange={e => setNovoUsuario({...novoUsuario, nivel_acesso: parseInt(e.target.value)})}>
-                      {nivelUsuario === 0 && <option value={0}>Nível 0: Administrador Geral (Total)</option>}
-                      <option value={1}>Nível 1: Responsável pelo Departamento</option>
+                      {nivelUsuario === 0 && <option value={0}>Nível 0: Admin Geral (Acesso Total)</option>}
+                      <option value={1}>Nível 1: Responsável pelo Dept.</option>
                       <option value={2}>Nível 2: Monitor / Operador</option>
                     </select>
 
                     <label>Usuário de Login</label>
                     <input type="text" required style={styles.input} value={novoUsuario.usuario} onChange={e => setNovoUsuario({...novoUsuario, usuario: e.target.value})} />
                     
-                    <label>Senha de Acesso</label>
+                    <label>Senha Provisória</label>
                     <input type="password" required style={styles.input} value={novoUsuario.senha} onChange={e => setNovoUsuario({...novoUsuario, senha: e.target.value})} />
                     
                     <button type="submit" style={{...styles.btnPrincipal, marginTop: '10px'}}>Cadastrar Usuário</button>
@@ -620,24 +668,31 @@ function App() {
                 </div>
               </div>
             )}
-            
+
           </div>
         </div>
 
-        {/* MODAL DE EDIÇÃO */}
+        {/* MODAL DE EDIÇÃO DE ITEM */}
         {itemEditando && (
           <div style={styles.modalOverlay}>
             <div style={styles.formCard}>
               <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Editar Material</h3>
               <form onSubmit={handleSalvarEdicao}>
-                <label>Nome do Item</label><input type="text" required style={styles.input} value={itemEditando.nome} onChange={e => setItemEditando({...itemEditando, nome: e.target.value})} />
+                <label>Nome do Item</label>
+                <input type="text" required style={styles.input} value={itemEditando.nome} onChange={e => setItemEditando({...itemEditando, nome: e.target.value})} />
+                
                 <label>Categoria</label>
                 <input type="text" required style={styles.input} list="cat-edit-list" value={itemEditando.categoria} onChange={e => setItemEditando({...itemEditando, categoria: e.target.value})} />
+                <datalist id="cat-edit-list">{categoriasUnicas.map(c => <option key={c} value={c} />)}</datalist>
+
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <div style={{ flex: 1 }}><label>Quantidade</label><input type="number" required min="0" style={styles.input} value={itemEditando.quantidade} onChange={e => setItemEditando({...itemEditando, quantidade: e.target.value})} /></div>
                   <div style={{ flex: 1 }}><label>Alerta Mínimo</label><input type="number" required min="0" style={styles.input} value={itemEditando.quantidade_minima || '0'} onChange={e => setItemEditando({...itemEditando, quantidade_minima: e.target.value})} /></div>
                 </div>
-                <label>Localização</label><input type="text" required style={styles.input} value={itemEditando.localizacao} onChange={e => setItemEditando({...itemEditando, localizacao: e.target.value})} />
+
+                <label>Localização</label>
+                <input type="text" required style={styles.input} value={itemEditando.localizacao} onChange={e => setItemEditando({...itemEditando, localizacao: e.target.value})} />
+                
                 <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
                   <button type="submit" style={styles.btnPrincipal}>Salvar</button>
                   <button type="button" style={{...styles.btnPrincipal, backgroundColor: '#bdc3c7', color: 'black'}} onClick={() => setItemEditando(null)}>Cancelar</button>
@@ -647,7 +702,7 @@ function App() {
           </div>
         )}
 
-        {/* MODAL EXCLUSÃO */}
+        {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
         {itemParaExcluir && (
           <div style={styles.modalOverlay}>
             <div style={{ ...styles.formCard, textAlign: 'center', padding: '30px' }}>
@@ -661,14 +716,14 @@ function App() {
           </div>
         )}
 
-        {/* MODAL SOLICITAÇÃO */}
+        {/* MODAL DE SOLICITAÇÃO DE MATERIAL */}
         {modalSolicitar.visivel && (
           <div style={styles.modalOverlay}>
             <div style={styles.formCard}>
               <h3 style={{color: CORES.roxoEscuro, marginBottom: '20px'}}>Solicitar Material</h3>
-              <p>Solicitando: <b>{modalSolicitar.item.nome}</b> do <b>{modalSolicitar.item.departamentos?.nome || `Dept ${modalSolicitar.item.departamento_id}`}</b></p>
+              <p style={{ marginBottom: '15px' }}>Pedindo <b>{modalSolicitar.item.nome}</b> para o <b>{getNomeDepartamento(modalSolicitar.item.departamento_id)}</b></p>
               <form onSubmit={enviarSolicitacao}>
-                <label>Quantidade a pedir (Máx: {modalSolicitar.item.quantidade})</label>
+                <label>Quantidade a pedir (Máx disponível: {modalSolicitar.item.quantidade})</label>
                 <input type="number" required min="1" max={modalSolicitar.item.quantidade} style={styles.input} value={modalSolicitar.quantidade} onChange={e => setModalSolicitar({...modalSolicitar, quantidade: e.target.value})} />
                 <div style={{display: 'flex', gap: '10px', marginTop: '15px'}}>
                   <button type="submit" style={{...styles.btnPrincipal, background: CORES.verde, color: 'white'}}>Enviar Pedido</button>
