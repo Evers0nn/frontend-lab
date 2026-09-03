@@ -38,6 +38,7 @@ function App() {
   const [saidas, setSaidas] = useState([]);
   const [solicitacoes, setSolicitacoes] = useState([]);
   const [departamentos, setDepartamentos] = useState([]);
+  const [usuariosList, setUsuariosList] = useState([]);
   const [auditoria, setAuditoria] = useState([]);
 
   const [busca, setBusca] = useState('');
@@ -53,7 +54,7 @@ function App() {
   
   const [itemEditando, setItemEditando] = useState(null);
   const [itemParaExcluir, setItemParaExcluir] = useState(null);
-  const [modalSolicitar, setModalSolicitar] = useState({ visivel: false, item: null, quantidade: 1 });
+  const [modalSolicitar, setModalSolicitar] = useState({ visivel: false, item: null, quantidade: 1, observacao: '' });
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [menuAberto, setMenuAberto] = useState(false);
@@ -92,12 +93,12 @@ function App() {
   const carregarDados = async () => {
     if (!token) return;
     try {
-      // CORREÇÃO: O ".catch" impede que todos os dados sumam se uma tabela der erro!
-      const [resEstoque, resSaidas, resDepts, resSolic] = await Promise.all([
+      const [resEstoque, resSaidas, resDepts, resSolic, resUsr] = await Promise.all([
         fetch(`${API_URL}/estoque`, { headers: getHeaders() }).catch(() => ({ok: false})),
         fetch(`${API_URL}/movimentacoes`, { headers: getHeaders() }).catch(() => ({ok: false})),
         fetch(`${API_URL}/departamentos`, { headers: getHeaders() }).catch(() => ({ok: false})),
-        fetch(`${API_URL}/solicitacoes`, { headers: getHeaders() }).catch(() => ({ok: false}))
+        fetch(`${API_URL}/solicitacoes`, { headers: getHeaders() }).catch(() => ({ok: false})),
+        fetch(`${API_URL}/usuarios`, { headers: getHeaders() }).catch(() => ({ok: false}))
       ]);
       
       if (resEstoque.status === 401) return deslogar();
@@ -106,12 +107,13 @@ function App() {
       if (resSaidas.ok) setSaidas(await resSaidas.json());
       if (resDepts.ok) setDepartamentos(await resDepts.json());
       if (resSolic.ok) setSolicitacoes(await resSolic.json());
+      if (resUsr.ok) setUsuariosList(await resUsr.json());
 
       if (user && parseInt(user.nivel_acesso) <= 1) {
         const resAud = await fetch(`${API_URL}/auditoria`, { headers: getHeaders() }).catch(() => ({ok: false}));
         if (resAud.ok) setAuditoria(await resAud.json());
       }
-    } catch (err) { console.error("Erro ao carregar os dados."); }
+    } catch (err) { console.error("Erro ao carregar dados."); }
   };
 
   useEffect(() => { 
@@ -131,6 +133,12 @@ function App() {
   const getNomeDepartamento = (id) => {
     const d = departamentos.find(dept => dept.id === id);
     return d ? d.nome : `Dept. ${id}`;
+  };
+
+  const getNomeUsuario = (id) => {
+    if (!id) return "Desconhecido";
+    const u = usuariosList.find(usr => usr.id === id);
+    return u ? u.nome : `Usuário ID ${id}`;
   };
 
   const handleBaixarPDFEstoque = () => {
@@ -282,14 +290,18 @@ function App() {
     e.preventDefault();
     if (modalSolicitar.quantidade > modalSolicitar.item.quantidade) return mostrarNotificacao("Quantidade maior que a disponível.", "erro");
     try {
-      const res = await fetch(`${API_URL}/solicitacoes`, { method: 'POST', headers: getHeaders(), body: JSON.stringify({ item_id: modalSolicitar.item.id, quantidade: parseInt(modalSolicitar.quantidade), dept_solicitado_id: modalSolicitar.item.departamento_id }) });
+      const payload = { 
+        item_id: modalSolicitar.item.id, 
+        quantidade: parseInt(modalSolicitar.quantidade), 
+        dept_solicitado_id: modalSolicitar.item.departamento_id,
+        observacao: modalSolicitar.observacao
+      };
+      const res = await fetch(`${API_URL}/solicitacoes`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(payload) });
       if (res.ok) { 
         mostrarNotificacao("Solicitação enviada com sucesso!"); 
-        setModalSolicitar({ visivel: false, item: null, quantidade: 1 }); 
+        setModalSolicitar({ visivel: false, item: null, quantidade: 1, observacao: '' }); 
         carregarDados(); 
-      } else { 
-        const err = await res.json(); mostrarNotificacao(err.detail, "erro"); 
-      }
+      } else { const err = await res.json(); mostrarNotificacao(err.detail, "erro"); }
     } catch (err) { mostrarNotificacao("Erro!", "erro"); }
   };
 
@@ -488,45 +500,52 @@ function App() {
               <div style={{ overflowX: 'auto', backgroundColor: 'white', borderRadius: '5px' }}>
                 <table style={styles.table}>
                   <thead>
-                    <tr style={{ background: CORES.marrom, color: 'white' }}>
-                      <th style={{ padding: '12px' }}>Material Solicitado</th>
-                      <th style={{ padding: '12px' }}>Quem Pediu?</th>
-                      <th style={{ padding: '12px' }}>De (Origem)</th>
-                      <th style={{ padding: '12px' }}>Para (Destino)</th>
-                      <th style={{ padding: '12px' }}>Qtd</th>
-                      <th style={{ padding: '12px' }}>Status</th>
-                      <th style={{ padding: '12px' }}>Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {solicitacoes.length > 0 ? solicitacoes.map(s => {
-                      const recebida = s.dept_solicitado_id === user.departamento_id;
-                      const podeAprovar = (nivelUsuario === 0 || (nivelUsuario === 1 && recebida)) && s.status === 'pendente';
-                      
-                      return (
-                        <tr key={s.id} style={{ textAlign: 'center', borderBottom: '1px solid #eee' }}>
-                          <td style={{ padding: '12px', fontWeight: 'bold', color: CORES.roxoEscuro }}>{obterNomeItem(s.item_id)}</td>
-                          <td style={{ padding: '12px' }}>{s.usuarios?.nome || 'Usuário'}</td>
-                          <td style={{ padding: '12px' }}>{getNomeDepartamento(s.dept_solicitado_id)}</td>
-                          <td style={{ padding: '12px' }}>{getNomeDepartamento(s.dept_solicitante_id)}</td>
-                          <td style={{ padding: '12px', fontWeight: 'bold' }}>{s.quantidade} un.</td>
-                          <td style={{ padding: '12px', fontWeight: 'bold', color: s.status === 'pendente' ? 'orange' : s.status === 'aprovado' ? 'green' : 'red' }}>
-                            {s.status.toUpperCase()}
-                          </td>
-                          <td style={{ padding: '12px' }}>
-                            {podeAprovar ? (
-                              <>
-                                <button style={{...styles.btnEditar, backgroundColor: CORES.verde}} onClick={() => responderSolicitacao(s.id, 'aprovado')}>Aprovar</button>
-                                <button style={{...styles.btnExcluir, backgroundColor: CORES.vermelho}} onClick={() => responderSolicitacao(s.id, 'rejeitado')}>Rejeitar</button>
-                              </>
-                            ) : (
-                              <span style={{ fontSize: '12px', color: '#999' }}>{s.status !== 'pendente' ? 'Finalizado' : 'Aguardando Aprovação'}</span>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    }) : <tr><td colSpan="7" style={{ padding: '20px', textAlign: 'center' }}>Nenhuma solicitação encontrada.</td></tr>}
-                  </tbody>
+                      <tr style={{ background: CORES.marrom, color: 'white' }}>
+                        <th style={{ padding: '12px' }}>Material</th>
+                        <th style={{ padding: '12px' }}>Quem Pediu?</th>
+                        <th style={{ padding: '12px' }}>De (Origem)</th>
+                        <th style={{ padding: '12px' }}>Para (Destino)</th>
+                        <th style={{ padding: '12px' }}>Qtd</th>
+                        <th style={{ padding: '12px' }}>Observação</th>
+                        <th style={{ padding: '12px' }}>Status</th>
+                        <th style={{ padding: '12px' }}>Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {solicitacoes.length > 0 ? solicitacoes.map(s => {
+                        const recebida = s.dept_solicitado_id === user.departamento_id;
+                        const podeAprovar = (nivelUsuario === 0 || (nivelUsuario === 1 && recebida)) && s.status === 'pendente';
+                        
+                        return (
+                          <tr key={s.id} style={{ textAlign: 'center', borderBottom: '1px solid #eee' }}>
+                            <td style={{ padding: '12px', fontWeight: 'bold', color: CORES.roxoEscuro }}>{obterNomeItem(s.item_id)}</td>
+                            <td style={{ padding: '12px' }}>{getNomeUsuario(s.usuario_solicitante_id)}</td>
+                            <td style={{ padding: '12px' }}>{getNomeDepartamento(s.dept_solicitado_id)}</td>
+                            <td style={{ padding: '12px' }}>{getNomeDepartamento(s.dept_solicitante_id)}</td>
+                            <td style={{ padding: '12px', fontWeight: 'bold' }}>{s.quantidade} un.</td>
+                            <td style={{ padding: '12px', fontSize: '13px', fontStyle: 'italic', maxWidth: '150px' }}>{s.observacao || '-'}</td>
+                            <td style={{ padding: '12px' }}>
+                              <span style={{ fontWeight: 'bold', color: s.status === 'pendente' ? 'orange' : s.status === 'aprovado' ? 'green' : 'red' }}>
+                                {s.status.toUpperCase()}
+                              </span>
+                              {s.status !== 'pendente' && s.usuario_respondedor_id && (
+                                <div style={{fontSize: '11px', color: '#7f8c8d', marginTop: '4px'}}>Por: {getNomeUsuario(s.usuario_respondedor_id)}</div>
+                              )}
+                            </td>
+                            <td style={{ padding: '12px' }}>
+                              {podeAprovar ? (
+                                <>
+                                  <button style={{...styles.btnEditar, backgroundColor: CORES.verde}} onClick={() => responderSolicitacao(s.id, 'aprovado')}>Aprovar</button>
+                                  <button style={{...styles.btnExcluir, backgroundColor: CORES.vermelho}} onClick={() => responderSolicitacao(s.id, 'rejeitado')}>Rejeitar</button>
+                                </>
+                              ) : (
+                                <span style={{ fontSize: '12px', color: '#999' }}>{s.status !== 'pendente' ? 'Finalizado' : 'Aguardando'}</span>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      }) : <tr><td colSpan="8" style={{ padding: '20px', textAlign: 'center' }}>Nenhuma solicitação encontrada.</td></tr>}
+                    </tbody>
                 </table>
               </div>
             </div>
@@ -770,13 +789,23 @@ function App() {
             <h3 style={{color: CORES.roxoEscuro, marginBottom: '20px'}}>Solicitar Material</h3>
             <p style={{ marginBottom: '15px' }}>Pedindo <b>{modalSolicitar.item.nome}</b> para o <b>{getNomeDepartamento(modalSolicitar.item.departamento_id)}</b></p>
             <form onSubmit={enviarSolicitacao}>
-              <label>Quantidade a pedir (Máx disponível: {modalSolicitar.item.quantidade})</label>
-              <input type="number" required min="1" max={modalSolicitar.item.quantidade} style={styles.input} value={modalSolicitar.quantidade} onChange={e => setModalSolicitar({...modalSolicitar, quantidade: e.target.value})} />
-              <div style={{display: 'flex', gap: '10px', marginTop: '15px'}}>
-                <button type="submit" style={{...styles.btnPrincipal, background: CORES.verde, color: 'white'}}>Enviar Pedido</button>
-                <button type="button" onClick={() => setModalSolicitar({visivel: false, item: null, quantidade: 1})} style={{...styles.btnPrincipal, background: '#bdc3c7'}}>Cancelar</button>
-              </div>
-            </form>
+                <label>Quantidade a pedir (Máx: {modalSolicitar.item.quantidade})</label>
+                <input type="number" required min="1" max={modalSolicitar.item.quantidade} style={styles.input} value={modalSolicitar.quantidade} onChange={e => setModalSolicitar({...modalSolicitar, quantidade: e.target.value})} />
+                
+                <label>Observação (Opcional - Máx: 500 caracteres)</label>
+                <textarea 
+                  maxLength="500" 
+                  placeholder="Justificativa do pedido..." 
+                  style={{...styles.input, height: '80px', resize: 'none'}} 
+                  value={modalSolicitar.observacao} 
+                  onChange={e => setModalSolicitar({...modalSolicitar, observacao: e.target.value})} 
+                />
+
+                <div style={{display: 'flex', gap: '10px', marginTop: '15px'}}>
+                  <button type="submit" style={{...styles.btnPrincipal, background: CORES.verde, color: 'white'}}>Enviar Pedido</button>
+                  <button type="button" onClick={() => setModalSolicitar({visivel: false, item: null, quantidade: 1, observacao: ''})} style={{...styles.btnPrincipal, background: '#bdc3c7'}}>Cancelar</button>
+                </div>
+              </form>
           </div>
         </div>
       )}
