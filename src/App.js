@@ -32,6 +32,7 @@ function App() {
   
   const [loginForm, setLoginForm] = useState({ usuario: '', senha: '' });
   const [novoUsuario, setNovoUsuario] = useState({ nome: '', usuario: '', senha: '', cargo: '', departamento_nome: '', nivel_acesso: 2 });
+  const [formSenha, setFormSenha] = useState({ atual: '', nova: '', confirmacao: '' });
   
   const [itens, setItens] = useState([]);
   const [saidas, setSaidas] = useState([]);
@@ -91,27 +92,33 @@ function App() {
   const carregarDados = async () => {
     if (!token) return;
     try {
+      // CORREÇÃO: O ".catch" impede que todos os dados sumam se uma tabela der erro!
       const [resEstoque, resSaidas, resDepts, resSolic] = await Promise.all([
-        fetch(`${API_URL}/estoque`, { headers: getHeaders() }),
-        fetch(`${API_URL}/movimentacoes`, { headers: getHeaders() }),
-        fetch(`${API_URL}/departamentos`, { headers: getHeaders() }),
-        fetch(`${API_URL}/solicitacoes`, { headers: getHeaders() })
+        fetch(`${API_URL}/estoque`, { headers: getHeaders() }).catch(() => ({ok: false})),
+        fetch(`${API_URL}/movimentacoes`, { headers: getHeaders() }).catch(() => ({ok: false})),
+        fetch(`${API_URL}/departamentos`, { headers: getHeaders() }).catch(() => ({ok: false})),
+        fetch(`${API_URL}/solicitacoes`, { headers: getHeaders() }).catch(() => ({ok: false}))
       ]);
       
       if (resEstoque.status === 401) return deslogar();
+      
       if (resEstoque.ok) setItens(await resEstoque.json());
       if (resSaidas.ok) setSaidas(await resSaidas.json());
       if (resDepts.ok) setDepartamentos(await resDepts.json());
       if (resSolic.ok) setSolicitacoes(await resSolic.json());
 
-      if (user && parseInt(user.nivel_acesso) === 0) {
-        const resAud = await fetch(`${API_URL}/auditoria`, { headers: getHeaders() });
+      if (user && parseInt(user.nivel_acesso) <= 1) {
+        const resAud = await fetch(`${API_URL}/auditoria`, { headers: getHeaders() }).catch(() => ({ok: false}));
         if (resAud.ok) setAuditoria(await resAud.json());
       }
-    } catch (err) { console.error("Erro ao carregar dados do servidor."); }
+    } catch (err) { console.error("Erro ao carregar os dados."); }
   };
 
-  useEffect(() => { if (user && token) carregarDados(); }, [user, token, view]);
+  useEffect(() => { 
+    if (user && token) {
+      carregarDados();
+    }
+  }, [user, token, view]);
 
   const mudarView = (novaView) => { setView(novaView); if (isMobile) setMenuAberto(false); };
 
@@ -127,7 +134,7 @@ function App() {
   };
 
   const handleBaixarPDFEstoque = () => {
-    mostrarNotificacao("Gerando relatório em PDF...", "info"); 
+    mostrarNotificacao("Gerando relatório...", "info"); 
     const doc = new jsPDF();
     doc.setFont("Arial", "bold"); doc.setFontSize(18); doc.setTextColor(87, 69, 145);
     doc.text("Controle de Materiais - Território do Fazer", 14, 20);
@@ -145,7 +152,7 @@ function App() {
   };
 
   const handleBaixarPDFSaidas = () => {
-    mostrarNotificacao("Gerando relatório em PDF...", "info"); 
+    mostrarNotificacao("Gerando relatório...", "info"); 
     const doc = new jsPDF();
     doc.setFont("Arial", "bold"); doc.setFontSize(18); doc.setTextColor(87, 69, 145);
     doc.text("Histórico de Saídas - Território do Fazer", 14, 20);
@@ -175,6 +182,27 @@ function App() {
         mostrarNotificacao(data.detail || "Usuário ou senha incorretos!", "erro"); 
       }
     } catch (err) { mostrarNotificacao("Erro de conexão.", "erro"); }
+  };
+
+  // NOVA FUNÇÃO: Trocar Senha
+  const handleTrocarSenha = async (e) => {
+    e.preventDefault();
+    if (formSenha.nova !== formSenha.confirmacao) {
+      return mostrarNotificacao("A nova senha e a confirmação não batem!", "erro");
+    }
+    try {
+      const payload = { senha_atual: formSenha.atual, nova_senha: formSenha.nova };
+      const res = await fetch(`${API_URL}/usuarios/senha`, { method: 'PUT', headers: getHeaders(), body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (res.ok) {
+        mostrarNotificacao("Senha alterada com sucesso!");
+        setFormSenha({ atual: '', nova: '', confirmacao: '' });
+      } else {
+        mostrarNotificacao(data.detail, "erro");
+      }
+    } catch (err) {
+      mostrarNotificacao("Erro ao conectar com o servidor.", "erro");
+    }
   };
 
   const handleCadastrarUsuario = async (e) => {
@@ -233,8 +261,7 @@ function App() {
       const res = await fetch(`${API_URL}/estoque/${itemEditando.id}`, { method: 'PUT', headers: getHeaders(), body: JSON.stringify(payload) });
       if (res.ok) { 
         mostrarNotificacao("Material atualizado!"); 
-        setItemEditando(null); 
-        carregarDados(); 
+        setItemEditando(null); carregarDados(); 
       } else { 
         const err = await res.json(); mostrarNotificacao(err.detail, "erro"); 
       }
@@ -274,7 +301,6 @@ function App() {
     } catch (err) { mostrarNotificacao("Erro!", "erro"); }
   };
 
-  // --- MÉTODOS DE FILTRO E ESTATÍSTICA ---
   const categoriasUnicas = [...new Set(itens.map(i => i.categoria))];
   const projetosUnicos = [...new Set(saidas.map(s => s.projeto).filter(Boolean))];
   const itensFiltrados = itens.filter(item => item.nome.toLowerCase().includes(busca.toLowerCase()) && (filtroCategoria === '' || item.categoria === filtroCategoria));
@@ -294,448 +320,468 @@ function App() {
 
   if (!user) {
     return (
-      <>
+      <div style={{ backgroundColor: CORES.roxoClaro, height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
         <NotificacaoUI />
-        <div style={{ backgroundColor: CORES.roxoClaro, height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
-          <div style={{ backgroundColor: CORES.branco, padding: '40px 30px', borderRadius: '15px', textAlign: 'center', width: '100%', maxWidth: '380px', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}>
-            <img src="/logo-territorio.png" alt="Logo" style={{ width: '130px', marginBottom: '15px' }} />
-            <h2 style={{ color: CORES.roxoEscuro, margin: '0 0 5px 0' }}>Acesso ao Sistema</h2>
-            <p style={{ color: CORES.roxoMedio, marginBottom: '25px', marginTop: 0 }}>Território do Fazer</p>
-            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <input type="text" required placeholder="Usuário" style={styles.input} onChange={e => setLoginForm({...loginForm, usuario: e.target.value})} />
-              <input type="password" required placeholder="Senha" style={styles.input} onChange={e => setLoginForm({...loginForm, senha: e.target.value})} />
-              <button type="submit" style={styles.btnPrincipal}>ENTRAR</button>
-            </form>
-          </div>
+        <div style={{ backgroundColor: CORES.branco, padding: '40px 30px', borderRadius: '15px', textAlign: 'center', width: '100%', maxWidth: '380px', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}>
+          <img src="/logo-territorio.png" alt="Logo" style={{ width: '130px', marginBottom: '15px' }} />
+          <h2 style={{ color: CORES.roxoEscuro, margin: '0 0 5px 0' }}>Acesso ao Sistema</h2>
+          <p style={{ color: CORES.roxoMedio, marginBottom: '25px', marginTop: 0 }}>Território do Fazer</p>
+          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            <input type="text" required placeholder="Usuário" style={styles.input} onChange={e => setLoginForm({...loginForm, usuario: e.target.value})} />
+            <input type="password" required placeholder="Senha" style={styles.input} onChange={e => setLoginForm({...loginForm, senha: e.target.value})} />
+            <button type="submit" style={styles.btnPrincipal}>ENTRAR</button>
+          </form>
         </div>
-      </>
+      </div>
     );
   }
 
   return (
-    <>
+    <div style={{ display: 'flex', height: '100vh', width: '100%', overflow: 'hidden' }}>
       <NotificacaoUI />
-      <div style={{ display: 'flex', height: '100vh', width: '100%', overflow: 'hidden' }}>
+      {isMobile && menuAberto && <div onClick={() => setMenuAberto(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 998 }} />}
+
+      <div style={{ width: '260px', backgroundColor: CORES.roxoEscuro, color: CORES.branco, display: 'flex', flexDirection: 'column', padding: '20px', position: isMobile ? 'fixed' : 'relative', height: '100%', top: 0, left: isMobile ? (menuAberto ? '0' : '-260px') : '0', transition: 'left 0.3s ease', zIndex: 999 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${CORES.roxoMedio}`, paddingBottom: '10px', marginBottom: '20px' }}>
+          <h3 style={{ margin: 0 }}>MENU</h3>
+          {isMobile && <button onClick={() => setMenuAberto(false)} style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '20px' }}>✖</button>}
+        </div>
         
-        {isMobile && menuAberto && <div onClick={() => setMenuAberto(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 998 }} />}
+        <button onClick={() => mudarView('estoque')} style={{...styles.navBtn, backgroundColor: view === 'estoque' ? CORES.roxoMedio : 'transparent'}}>📦 Estoque Geral</button>
+        
+        <button onClick={() => mudarView('solicitacoes')} style={{...styles.navBtn, backgroundColor: view === 'solicitacoes' ? CORES.roxoMedio : 'transparent', position: 'relative'}}>
+          <span>📥 Solicitações</span>
+          {qtdSolicitacoesPendentes > 0 && <span style={{background: 'red', color: 'white', borderRadius: '50%', padding: '2px 6px', fontSize: '11px', marginLeft: '8px'}}>{qtdSolicitacoesPendentes}</span>}
+        </button>
+        
+        <button onClick={() => mudarView('gerenciar')} style={{...styles.navBtn, backgroundColor: view === 'gerenciar' ? CORES.roxoMedio : 'transparent'}}>➕ Novo Material</button>
+        <button onClick={() => mudarView('nova_saida')} style={{...styles.navBtn, backgroundColor: view === 'nova_saida' ? CORES.roxoMedio : 'transparent'}}>📤 Registrar Saída</button>
+        <button onClick={() => mudarView('projetos_graficos')} style={{...styles.navBtn, backgroundColor: view === 'projetos_graficos' ? CORES.roxoMedio : 'transparent'}}>📊 Dashboard Projetos</button>
+        
+        <div style={{ height: '1px', backgroundColor: CORES.roxoMedio, margin: '10px 0' }} />
+        
+        {nivelUsuario <= 1 && (
+          <button onClick={() => mudarView('auditoria')} style={{...styles.navBtn, backgroundColor: view === 'auditoria' ? CORES.roxoMedio : 'transparent'}}>📜 Log Departamento</button>
+        )}
 
-        <div style={{ width: '260px', backgroundColor: CORES.roxoEscuro, color: CORES.branco, display: 'flex', flexDirection: 'column', padding: '20px', position: isMobile ? 'fixed' : 'relative', height: '100%', top: 0, left: isMobile ? (menuAberto ? '0' : '-260px') : '0', transition: 'left 0.3s ease', zIndex: 999 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${CORES.roxoMedio}`, paddingBottom: '10px', marginBottom: '20px' }}>
-            <h3 style={{ margin: 0 }}>MENU</h3>
-            {isMobile && <button onClick={() => setMenuAberto(false)} style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '20px' }}>✖</button>}
-          </div>
-          
-          <button onClick={() => mudarView('estoque')} style={{...styles.navBtn, backgroundColor: view === 'estoque' ? CORES.roxoMedio : 'transparent'}}>📦 Estoque Geral</button>
-          
-          <button onClick={() => mudarView('solicitacoes')} style={{...styles.navBtn, backgroundColor: view === 'solicitacoes' ? CORES.roxoMedio : 'transparent'}}>
-            <span>📥 Solicitações</span>
-            {qtdSolicitacoesPendentes > 0 && <span style={{background: 'red', color: 'white', borderRadius: '50%', padding: '2px 6px', fontSize: '11px'}}>{qtdSolicitacoesPendentes}</span>}
-          </button>
-          
-          <button onClick={() => mudarView('gerenciar')} style={{...styles.navBtn, backgroundColor: view === 'gerenciar' ? CORES.roxoMedio : 'transparent'}}>➕ Novo Material</button>
-          <button onClick={() => mudarView('nova_saida')} style={{...styles.navBtn, backgroundColor: view === 'nova_saida' ? CORES.roxoMedio : 'transparent'}}>📤 Registrar Saída</button>
-          <button onClick={() => mudarView('projetos_graficos')} style={{...styles.navBtn, backgroundColor: view === 'projetos_graficos' ? CORES.roxoMedio : 'transparent'}}>📊 Dashboard Projetos</button>
-          
-          <div style={{ height: '1px', backgroundColor: CORES.roxoMedio, margin: '10px 0' }} />
-          
-          {nivelUsuario === 0 && (
-            <button onClick={() => mudarView('auditoria')} style={{...styles.navBtn, backgroundColor: view === 'auditoria' ? CORES.roxoMedio : 'transparent'}}>📜 Log Global</button>
-          )}
+        {(nivelUsuario <= 1) && (
+          <button onClick={() => mudarView('configs')} style={{...styles.navBtn, backgroundColor: view === 'configs' ? CORES.roxoMedio : 'transparent'}}>👥 Controle Usuários</button>
+        )}
 
-          {(nivelUsuario === 0 || nivelUsuario === 1) && (
-            <button onClick={() => mudarView('configs')} style={{...styles.navBtn, backgroundColor: view === 'configs' ? CORES.roxoMedio : 'transparent'}}>👥 Controle Usuários</button>
-          )}
-          
-          <div style={{ marginTop: 'auto', borderTop: `1px solid ${CORES.roxoMedio}`, paddingTop: '10px' }}>
-            <p style={{ fontWeight: 'bold', margin: '0 0 4px 0' }}>{user.nome}</p>
-            <p style={{ fontSize: '12px', color: CORES.roxoClaro, margin: '0 0 4px 0' }}>{getNomeNivel(nivelUsuario)}</p>
-            <p style={{ fontSize: '11px', color: '#ddd', margin: 0 }}>Dept: {getNomeDepartamento(user.departamento_id)}</p>
-            <button onClick={deslogar} style={{ ...styles.btnPrincipal, backgroundColor: CORES.laranja, marginTop: '10px' }}>Sair</button>
+        <button onClick={() => mudarView('mudar_senha')} style={{...styles.navBtn, backgroundColor: view === 'mudar_senha' ? CORES.roxoMedio : 'transparent'}}>🔑 Trocar Senha</button>
+        
+        <div style={{ marginTop: 'auto', borderTop: `1px solid ${CORES.roxoMedio}`, paddingTop: '10px' }}>
+          <p style={{ fontWeight: 'bold', margin: '0 0 4px 0' }}>{user.nome}</p>
+          <p style={{ fontSize: '12px', color: CORES.roxoClaro, margin: '0 0 4px 0' }}>{getNomeNivel(nivelUsuario)}</p>
+          <p style={{ fontSize: '11px', color: '#ddd', margin: 0 }}>Dept: {getNomeDepartamento(user.departamento_id)}</p>
+          <button onClick={deslogar} style={{ ...styles.btnPrincipal, backgroundColor: CORES.laranja, marginTop: '10px' }}>Sair</button>
+        </div>
+      </div>
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#f9f9f9', overflow: 'hidden' }}>
+        
+        <div style={{ height: '80px', minHeight: '80px', backgroundColor: CORES.branco, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: isMobile ? '0 10px' : '0 30px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            {isMobile && <button onClick={() => setMenuAberto(true)} style={{ background: 'transparent', border: 'none', fontSize: '26px', marginRight: '10px' }}>☰</button>}
+            <img src="/logo-territorio.png" alt="Logo" style={{ height: isMobile ? '35px' : '50px' }} />
           </div>
+          <h2 style={{ color: CORES.roxoEscuro, fontSize: isMobile ? '14px' : '20px', flex: 1, textAlign: 'center' }}>Controle de Materiais</h2>
+          <img src="/logo-instituto.png" alt="Logo" style={{ height: isMobile ? '25px' : '40px' }} />
         </div>
 
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#f9f9f9', overflow: 'hidden' }}>
+        <div style={{ padding: isMobile ? '15px' : '30px', overflowY: 'auto', height: 'calc(100vh - 80px)' }}>
           
-          <div style={{ height: '80px', minHeight: '80px', backgroundColor: CORES.branco, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: isMobile ? '0 10px' : '0 30px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              {isMobile && <button onClick={() => setMenuAberto(true)} style={{ background: 'transparent', border: 'none', fontSize: '26px', marginRight: '10px' }}>☰</button>}
-              <img src="/logo-territorio.png" alt="Logo" style={{ height: isMobile ? '35px' : '50px' }} />
+          {/* TELA DE TROCAR SENHA */}
+          {view === 'mudar_senha' && (
+            <div>
+              <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Trocar Senha de Acesso</h3>
+              <div style={styles.formCard}>
+                <form onSubmit={handleTrocarSenha}>
+                  <label>Senha Atual</label>
+                  <input type="password" required style={styles.input} value={formSenha.atual} onChange={e => setFormSenha({...formSenha, atual: e.target.value})} />
+                  
+                  <label>Nova Senha</label>
+                  <input type="password" required style={styles.input} value={formSenha.nova} onChange={e => setFormSenha({...formSenha, nova: e.target.value})} />
+                  
+                  <label>Confirmar Nova Senha</label>
+                  <input type="password" required style={styles.input} value={formSenha.confirmacao} onChange={e => setFormSenha({...formSenha, confirmacao: e.target.value})} />
+                  
+                  <button type="submit" style={{...styles.btnPrincipal, marginTop: '10px'}}>Atualizar Senha</button>
+                </form>
+              </div>
             </div>
-            <h2 style={{ color: CORES.roxoEscuro, fontSize: isMobile ? '14px' : '20px', flex: 1, textAlign: 'center' }}>Controle de Materiais</h2>
-            <img src="/logo-instituto.png" alt="Logo" style={{ height: isMobile ? '25px' : '40px' }} />
-          </div>
+          )}
 
-          <div style={{ padding: isMobile ? '15px' : '30px', overflowY: 'auto', height: 'calc(100vh - 80px)' }}>
-            
-            {/* 1. TELA DE ESTOQUE GERAL */}
-            {view === 'estoque' && (
-              <div>
-                <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', marginBottom: '20px', gap: '15px' }}>
-                  <h3 style={{ color: CORES.roxoEscuro, margin: 0 }}>Estoque Geral</h3>
-                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
-                    <input type="text" placeholder="Pesquisar..." style={{...styles.input, marginBottom: 0, width: isMobile ? '100%' : '220px'}} value={busca} onChange={(e) => setBusca(e.target.value)} />
-                    <select style={{...styles.input, marginBottom: 0, width: isMobile ? 'calc(100% - 110px)' : '280px'}} value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
-                      <option value="">Todas as Categorias</option>
-                      {categoriasUnicas.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                    </select>
-                    <button onClick={handleBaixarPDFEstoque} style={{...styles.btnPrincipal, width: 'auto', backgroundColor: CORES.roxoMedio, color: 'white'}}>📄 PDF</button>
-                  </div>
+          {/* 1. TELA DE ESTOQUE GERAL */}
+          {view === 'estoque' && (
+            <div>
+              <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', marginBottom: '20px', gap: '15px' }}>
+                <h3 style={{ color: CORES.roxoEscuro, margin: 0 }}>Estoque Geral</h3>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
+                  <input type="text" placeholder="Pesquisar..." style={{...styles.input, marginBottom: 0, width: isMobile ? '100%' : '220px'}} value={busca} onChange={(e) => setBusca(e.target.value)} />
+                  <select style={{...styles.input, marginBottom: 0, width: isMobile ? 'calc(100% - 110px)' : '280px'}} value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
+                    <option value="">Todas as Categorias</option>
+                    {categoriasUnicas.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  </select>
+                  <button onClick={handleBaixarPDFEstoque} style={{...styles.btnPrincipal, width: 'auto', backgroundColor: CORES.roxoMedio, color: 'white'}}>📄 PDF</button>
                 </div>
+              </div>
 
-                <div style={{ overflowX: 'auto', backgroundColor: 'white', borderRadius: '5px' }}>
-                  <table style={styles.table}>
-                    <thead>
-                      <tr style={{ backgroundColor: CORES.roxoMedio, color: 'white' }}>
-                        <th style={{ padding: '12px' }}>ID</th>
-                        <th style={{ padding: '12px' }}>Item</th>
-                        <th style={{ padding: '12px' }}>Categoria</th>
-                        <th style={{ padding: '12px' }}>Dept.</th>
-                        <th style={{ padding: '12px' }}>Qtd</th>
-                        <th style={{ padding: '12px' }}>Ações</th>
+              <div style={{ overflowX: 'auto', backgroundColor: 'white', borderRadius: '5px' }}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr style={{ backgroundColor: CORES.roxoMedio, color: 'white' }}>
+                      <th style={{ padding: '12px' }}>ID</th>
+                      <th style={{ padding: '12px' }}>Item</th>
+                      <th style={{ padding: '12px' }}>Categoria</th>
+                      <th style={{ padding: '12px' }}>Dept.</th>
+                      <th style={{ padding: '12px' }}>Qtd</th>
+                      <th style={{ padding: '12px' }}>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {itensAtuais.map(i => {
+                      const meuDept = i.departamento_id === user.departamento_id;
+                      const podeEditar = meuDept || nivelUsuario === 0;
+                      const podeExcluir = (meuDept && nivelUsuario <= 1) || nivelUsuario === 0;
+                      const isAlerta = i.quantidade <= i.quantidade_minima;
+
+                      return (
+                      <tr key={i.id} style={{ textAlign: 'center', borderBottom: '1px solid #eee', backgroundColor: isAlerta ? '#fff9f9' : 'white' }}>
+                        <td style={{ padding: '12px' }}>{i.id}</td>
+                        <td style={{ padding: '12px', textAlign: 'left' }}>{i.nome}</td>
+                        <td style={{ padding: '12px' }}>{i.categoria}</td>
+                        <td style={{ padding: '12px' }}>{i.departamentos?.nome || getNomeDepartamento(i.departamento_id)}</td>
+                        <td style={{ padding: '12px', color: isAlerta ? 'red' : 'black', fontWeight: 'bold' }}>
+                          {i.quantidade} {isAlerta && <span title="Estoque Mínimo Atingido!">⚠️</span>}
+                        </td>
+                        <td style={{ padding: '12px' }}>
+                          {podeEditar ? (
+                            <>
+                              <button style={styles.btnEditar} onClick={() => setItemEditando(i)} title="Editar">✏️</button>
+                              {podeExcluir && <button style={styles.btnExcluir} onClick={() => setItemParaExcluir(i)} title="Excluir">🗑️</button>}
+                            </>
+                          ) : (
+                            <button style={{...styles.btnEditar, backgroundColor: CORES.roxoEscuro}} onClick={()=>setModalSolicitar({visivel: true, item: i, quantidade: 1})}>🤝 Solicitar</button>
+                          )}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {itensAtuais.map(i => {
-                        const meuDept = i.departamento_id === user.departamento_id;
-                        const podeEditar = meuDept || nivelUsuario === 0;
-                        const podeExcluir = (meuDept && nivelUsuario <= 1) || nivelUsuario === 0;
-                        const isAlerta = i.quantidade <= i.quantidade_minima;
+                    )})}
+                  </tbody>
+                </table>
+              </div>
 
-                        return (
-                        <tr key={i.id} style={{ textAlign: 'center', borderBottom: '1px solid #eee', backgroundColor: isAlerta ? '#fff9f9' : 'white' }}>
-                          <td style={{ padding: '12px' }}>{i.id}</td>
-                          <td style={{ padding: '12px', textAlign: 'left' }}>{i.nome}</td>
-                          <td style={{ padding: '12px' }}>{i.categoria}</td>
-                          <td style={{ padding: '12px' }}>{i.departamentos?.nome || getNomeDepartamento(i.departamento_id)}</td>
-                          <td style={{ padding: '12px', color: isAlerta ? 'red' : 'black', fontWeight: 'bold' }}>
-                            {i.quantidade} {isAlerta && <span title="Estoque Mínimo Atingido!">⚠️</span>}
+              {totalPaginas > 1 && (
+                <div style={{ display: 'flex', alignItems: 'center', marginTop: '20px', gap: '10px', justifyContent: 'center' }}>
+                  <button onClick={() => setPaginaAtual(paginaAtual - 1)} disabled={paginaAtual === 1} style={{ ...styles.btnPrincipal, width: 'auto', padding: '10px 15px' }}>Anterior</button>
+                  <span style={{ color: CORES.roxoEscuro, fontWeight: 'bold' }}>Pág. {paginaAtual} de {totalPaginas}</span>
+                  <button onClick={() => setPaginaAtual(paginaAtual + 1)} disabled={paginaAtual === totalPaginas} style={{ ...styles.btnPrincipal, width: 'auto', padding: '10px 15px' }}>Próxima</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 2. TELA DE CAIXA DE SOLICITAÇÕES */}
+          {view === 'solicitacoes' && (
+            <div>
+              <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Caixa de Solicitações entre Departamentos</h3>
+              <div style={{ overflowX: 'auto', backgroundColor: 'white', borderRadius: '5px' }}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr style={{ background: CORES.marrom, color: 'white' }}>
+                      <th style={{ padding: '12px' }}>Material Solicitado</th>
+                      <th style={{ padding: '12px' }}>Quem Pediu?</th>
+                      <th style={{ padding: '12px' }}>De (Origem)</th>
+                      <th style={{ padding: '12px' }}>Para (Destino)</th>
+                      <th style={{ padding: '12px' }}>Qtd</th>
+                      <th style={{ padding: '12px' }}>Status</th>
+                      <th style={{ padding: '12px' }}>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {solicitacoes.length > 0 ? solicitacoes.map(s => {
+                      const recebida = s.dept_solicitado_id === user.departamento_id;
+                      const podeAprovar = (nivelUsuario === 0 || (nivelUsuario === 1 && recebida)) && s.status === 'pendente';
+                      
+                      return (
+                        <tr key={s.id} style={{ textAlign: 'center', borderBottom: '1px solid #eee' }}>
+                          <td style={{ padding: '12px', fontWeight: 'bold', color: CORES.roxoEscuro }}>{obterNomeItem(s.item_id)}</td>
+                          <td style={{ padding: '12px' }}>{s.usuarios?.nome || 'Usuário'}</td>
+                          <td style={{ padding: '12px' }}>{getNomeDepartamento(s.dept_solicitado_id)}</td>
+                          <td style={{ padding: '12px' }}>{getNomeDepartamento(s.dept_solicitante_id)}</td>
+                          <td style={{ padding: '12px', fontWeight: 'bold' }}>{s.quantidade} un.</td>
+                          <td style={{ padding: '12px', fontWeight: 'bold', color: s.status === 'pendente' ? 'orange' : s.status === 'aprovado' ? 'green' : 'red' }}>
+                            {s.status.toUpperCase()}
                           </td>
                           <td style={{ padding: '12px' }}>
-                            {podeEditar ? (
+                            {podeAprovar ? (
                               <>
-                                <button style={styles.btnEditar} onClick={() => setItemEditando(i)} title="Editar">✏️</button>
-                                {podeExcluir && <button style={styles.btnExcluir} onClick={() => setItemParaExcluir(i)} title="Excluir">🗑️</button>}
+                                <button style={{...styles.btnEditar, backgroundColor: CORES.verde}} onClick={() => responderSolicitacao(s.id, 'aprovado')}>Aprovar</button>
+                                <button style={{...styles.btnExcluir, backgroundColor: CORES.vermelho}} onClick={() => responderSolicitacao(s.id, 'rejeitado')}>Rejeitar</button>
                               </>
                             ) : (
-                              <button style={{...styles.btnEditar, backgroundColor: CORES.roxoEscuro}} onClick={()=>setModalSolicitar({visivel: true, item: i, quantidade: 1})}>🤝 Solicitar</button>
+                              <span style={{ fontSize: '12px', color: '#999' }}>{s.status !== 'pendente' ? 'Finalizado' : 'Aguardando Aprovação'}</span>
                             )}
                           </td>
                         </tr>
-                      )})}
-                    </tbody>
-                  </table>
-                </div>
+                      )
+                    }) : <tr><td colSpan="7" style={{ padding: '20px', textAlign: 'center' }}>Nenhuma solicitação encontrada.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
-                {totalPaginas > 1 && (
-                  <div style={{ display: 'flex', alignItems: 'center', marginTop: '20px', gap: '10px', justifyContent: 'center' }}>
-                    <button onClick={() => setPaginaAtual(paginaAtual - 1)} disabled={paginaAtual === 1} style={{ ...styles.btnPrincipal, width: 'auto', padding: '10px 15px' }}>Anterior</button>
-                    <span style={{ color: CORES.roxoEscuro, fontWeight: 'bold' }}>Pág. {paginaAtual} de {totalPaginas}</span>
-                    <button onClick={() => setPaginaAtual(paginaAtual + 1)} disabled={paginaAtual === totalPaginas} style={{ ...styles.btnPrincipal, width: 'auto', padding: '10px 15px' }}>Próxima</button>
+          {/* 3. TELA DE NOVO MATERIAL */}
+          {view === 'gerenciar' && (
+            <div>
+              <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Adicionar Novo Material (Ao seu Dept.)</h3>
+              <div style={styles.formCard}>
+                <form onSubmit={handleCadastrarItem}>
+                  <label>Nome do Item</label>
+                  <input type="text" required style={styles.input} value={novoItem.nome} onChange={e => setNovoItem({...novoItem, nome: e.target.value})} />
+                  
+                  <label>Categoria</label>
+                  <input type="text" required style={styles.input} list="cat-list" value={novoItem.categoria} onChange={e => setNovoItem({...novoItem, categoria: e.target.value})} />
+                  <datalist id="cat-list">{categoriasUnicas.map(c => <option key={c} value={c} />)}</datalist>
+                  
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <div style={{ flex: 1 }}><label>Qtd Inicial</label><input type="number" required min="0" style={styles.input} value={novoItem.quantidade} onChange={e => setNovoItem({...novoItem, quantidade: e.target.value})} /></div>
+                    <div style={{ flex: 1 }}><label>Alerta Mínimo</label><input type="number" required min="0" style={styles.input} value={novoItem.quantidade_minima} onChange={e => setNovoItem({...novoItem, quantidade_minima: e.target.value})} /></div>
                   </div>
-                )}
+                  
+                  <label>Localização Física</label>
+                  <input type="text" required style={styles.input} value={novoItem.localizacao} onChange={e => setNovoItem({...novoItem, localizacao: e.target.value})} />
+                  
+                  <button type="submit" style={{...styles.btnPrincipal, marginTop: '10px'}}>Salvar no Estoque</button>
+                </form>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* 2. TELA DE CAIXA DE SOLICITAÇÕES */}
-            {view === 'solicitacoes' && (
-              <div>
-                <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Caixa de Solicitações entre Departamentos</h3>
-                <div style={{ overflowX: 'auto', backgroundColor: 'white', borderRadius: '5px' }}>
-                  <table style={styles.table}>
-                    <thead>
-                      <tr style={{ background: CORES.marrom, color: 'white' }}>
-                        <th style={{ padding: '12px' }}>Material Solicitado</th>
-                        <th style={{ padding: '12px' }}>Quem Pediu?</th>
-                        <th style={{ padding: '12px' }}>De (Origem)</th>
-                        <th style={{ padding: '12px' }}>Para (Destino)</th>
-                        <th style={{ padding: '12px' }}>Qtd</th>
-                        <th style={{ padding: '12px' }}>Status</th>
-                        <th style={{ padding: '12px' }}>Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {solicitacoes.length > 0 ? solicitacoes.map(s => {
-                        const recebida = s.dept_solicitado_id === user.departamento_id;
-                        const podeAprovar = (nivelUsuario === 0 || (nivelUsuario === 1 && recebida)) && s.status === 'pendente';
-                        
-                        return (
-                          <tr key={s.id} style={{ textAlign: 'center', borderBottom: '1px solid #eee' }}>
-                            <td style={{ padding: '12px', fontWeight: 'bold', color: CORES.roxoEscuro }}>{obterNomeItem(s.item_id)}</td>
-                            <td style={{ padding: '12px' }}>{s.usuarios?.nome || 'Usuário'}</td>
-                            <td style={{ padding: '12px' }}>{getNomeDepartamento(s.dept_solicitado_id)}</td>
-                            <td style={{ padding: '12px' }}>{getNomeDepartamento(s.dept_solicitante_id)}</td>
-                            <td style={{ padding: '12px', fontWeight: 'bold' }}>{s.quantidade} un.</td>
-                            <td style={{ padding: '12px', fontWeight: 'bold', color: s.status === 'pendente' ? 'orange' : s.status === 'aprovado' ? 'green' : 'red' }}>
-                              {s.status.toUpperCase()}
-                            </td>
-                            <td style={{ padding: '12px' }}>
-                              {podeAprovar ? (
-                                <>
-                                  <button style={{...styles.btnEditar, backgroundColor: CORES.verde}} onClick={() => responderSolicitacao(s.id, 'aprovado')}>Aprovar</button>
-                                  <button style={{...styles.btnExcluir, backgroundColor: CORES.vermelho}} onClick={() => responderSolicitacao(s.id, 'rejeitado')}>Rejeitar</button>
-                                </>
-                              ) : (
-                                <span style={{ fontSize: '12px', color: '#999' }}>{s.status !== 'pendente' ? 'Finalizado' : 'Aguardando Aprovação'}</span>
-                              )}
-                            </td>
-                          </tr>
-                        )
-                      }) : <tr><td colSpan="7" style={{ padding: '20px', textAlign: 'center' }}>Nenhuma solicitação encontrada.</td></tr>}
-                    </tbody>
-                  </table>
-                </div>
+          {/* 4. TELA DE REGISTRAR SAÍDA */}
+          {view === 'nova_saida' && (
+            <div>
+              <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Registrar Saída de Material (Do seu Dept.)</h3>
+              <div style={styles.formCard}>
+                <form onSubmit={handleCadastrarSaida}>
+                  <label>Selecione o Material</label>
+                  <select required style={styles.input} value={novaSaida.item_id} onChange={e => setNovaSaida({...novaSaida, item_id: e.target.value})}>
+                    <option value="">-- Escolha um item --</option>
+                    {itens.filter(i => i.quantidade > 0 && (i.departamento_id === user.departamento_id || nivelUsuario === 0)).map(i => (
+                      <option key={i.id} value={i.id}>{i.nome} (Disponível: {i.quantidade})</option>
+                    ))}
+                  </select>
+
+                  <label>Quantidade a Retirar</label>
+                  <input type="number" required min="1" style={styles.input} value={novaSaida.quantidade} onChange={e => setNovaSaida({...novaSaida, quantidade: e.target.value})} />
+                  
+                  <label>Nome do Projeto / Destino</label>
+                  <input type="text" required style={styles.input} placeholder="Ex: Robô Seguidor de Linha" list="proj-list" value={novaSaida.projeto} onChange={e => setNovaSaida({...novaSaida, projeto: e.target.value})} />
+                  <datalist id="proj-list">{projetosUnicos.map(p => <option key={p} value={p} />)}</datalist>
+
+                  <button type="submit" style={{...styles.btnPrincipal, marginTop: '10px', backgroundColor: CORES.roxoMedio, color: 'white'}}>Confirmar Saída</button>
+                </form>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* 3. TELA DE NOVO MATERIAL */}
-            {view === 'gerenciar' && (
-              <div>
-                <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Adicionar Novo Material (Ao seu Dept.)</h3>
-                <div style={styles.formCard}>
-                  <form onSubmit={handleCadastrarItem}>
-                    <label>Nome do Item</label>
-                    <input type="text" required style={styles.input} value={novoItem.nome} onChange={e => setNovoItem({...novoItem, nome: e.target.value})} />
-                    
-                    <label>Categoria</label>
-                    <input type="text" required style={styles.input} list="cat-list" value={novoItem.categoria} onChange={e => setNovoItem({...novoItem, categoria: e.target.value})} />
-                    <datalist id="cat-list">{categoriasUnicas.map(c => <option key={c} value={c} />)}</datalist>
-                    
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                      <div style={{ flex: 1 }}><label>Qtd Inicial</label><input type="number" required min="0" style={styles.input} value={novoItem.quantidade} onChange={e => setNovoItem({...novoItem, quantidade: e.target.value})} /></div>
-                      <div style={{ flex: 1 }}><label>Alerta Mínimo</label><input type="number" required min="0" style={styles.input} value={novoItem.quantidade_minima} onChange={e => setNovoItem({...novoItem, quantidade_minima: e.target.value})} /></div>
+          {/* 5. DASHBOARD DE PROJETOS E HISTÓRICO DE SAÍDAS */}
+          {view === 'projetos_graficos' && (
+            <div>
+              <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Dashboard de Projetos e Consumo</h3>
+              
+              {/* GRÁFICO VISUAL DE BARRAS */}
+              <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', marginBottom: '30px' }}>
+                <h4 style={{ margin: '0 0 15px 0', color: CORES.roxoMedio }}>Percentual de Consumo por Projeto</h4>
+                {estatisticasProjetos().length > 0 ? estatisticasProjetos().map((est, idx) => (
+                  <div key={idx} style={{ marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 'bold', marginBottom: '4px' }}>
+                      <span>{est.projeto}</span>
+                      <span>{est.porcentagem}% ({est.quantidade} itens)</span>
                     </div>
-                    
-                    <label>Localização Física</label>
-                    <input type="text" required style={styles.input} value={novoItem.localizacao} onChange={e => setNovoItem({...novoItem, localizacao: e.target.value})} />
-                    
-                    <button type="submit" style={{...styles.btnPrincipal, marginTop: '10px'}}>Salvar no Estoque</button>
-                  </form>
-                </div>
-              </div>
-            )}
-
-            {/* 4. TELA DE REGISTRAR SAÍDA */}
-            {view === 'nova_saida' && (
-              <div>
-                <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Registrar Saída de Material (Do seu Dept.)</h3>
-                <div style={styles.formCard}>
-                  <form onSubmit={handleCadastrarSaida}>
-                    <label>Selecione o Material</label>
-                    <select required style={styles.input} value={novaSaida.item_id} onChange={e => setNovaSaida({...novaSaida, item_id: e.target.value})}>
-                      <option value="">-- Escolha um item --</option>
-                      {itens.filter(i => i.quantidade > 0 && (i.departamento_id === user.departamento_id || nivelUsuario === 0)).map(i => (
-                        <option key={i.id} value={i.id}>{i.nome} (Disponível: {i.quantidade})</option>
-                      ))}
-                    </select>
-
-                    <label>Quantidade a Retirar</label>
-                    <input type="number" required min="1" style={styles.input} value={novaSaida.quantidade} onChange={e => setNovaSaida({...novaSaida, quantidade: e.target.value})} />
-                    
-                    <label>Nome do Projeto / Destino</label>
-                    <input type="text" required style={styles.input} placeholder="Ex: Robô Seguidor de Linha" list="proj-list" value={novaSaida.projeto} onChange={e => setNovaSaida({...novaSaida, projeto: e.target.value})} />
-                    <datalist id="proj-list">{projetosUnicos.map(p => <option key={p} value={p} />)}</datalist>
-
-                    <button type="submit" style={{...styles.btnPrincipal, marginTop: '10px', backgroundColor: CORES.roxoMedio, color: 'white'}}>Confirmar Saída</button>
-                  </form>
-                </div>
-              </div>
-            )}
-
-            {/* 5. DASHBOARD DE PROJETOS E HISTÓRICO DE SAÍDAS */}
-            {view === 'projetos_graficos' && (
-              <div>
-                <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Dashboard de Projetos e Consumo</h3>
-                
-                {/* GRÁFICO VISUAL DE BARRAS */}
-                <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', marginBottom: '30px' }}>
-                  <h4 style={{ margin: '0 0 15px 0', color: CORES.roxoMedio }}>Percentual de Consumo por Projeto</h4>
-                  {estatisticasProjetos().length > 0 ? estatisticasProjetos().map((est, idx) => (
-                    <div key={idx} style={{ marginBottom: '12px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 'bold', marginBottom: '4px' }}>
-                        <span>{est.projeto}</span>
-                        <span>{est.porcentagem}% ({est.quantidade} itens)</span>
-                      </div>
-                      <div style={{ width: '100%', backgroundColor: '#ecf0f1', borderRadius: '10px', height: '14px', overflow: 'hidden' }}>
-                        <div style={{ width: `${est.porcentagem}%`, backgroundColor: CORES.laranja, height: '100%', transition: 'width 1s ease-in-out' }} />
-                      </div>
+                    <div style={{ width: '100%', backgroundColor: '#ecf0f1', borderRadius: '10px', height: '14px', overflow: 'hidden' }}>
+                      <div style={{ width: `${est.porcentagem}%`, backgroundColor: CORES.laranja, height: '100%', transition: 'width 1s ease-in-out' }} />
                     </div>
-                  )) : <p style={{ fontSize: '14px', color: '#7f8c8d' }}>Nenhuma saída registrada ainda.</p>}
-                </div>
+                  </div>
+                )) : <p style={{ fontSize: '14px', color: '#7f8c8d' }}>Nenhuma saída registrada ainda.</p>}
+              </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                  <h4 style={{ margin: 0, color: CORES.roxoEscuro }}>Tabela de Registros de Movimentação</h4>
-                  <button onClick={handleBaixarPDFSaidas} style={{...styles.btnPrincipal, width: 'auto', backgroundColor: CORES.roxoEscuro, color: 'white'}}>📄 Exportar PDF</button>
-                </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <h4 style={{ margin: 0, color: CORES.roxoEscuro }}>Tabela de Registros de Movimentação</h4>
+                <button onClick={handleBaixarPDFSaidas} style={{...styles.btnPrincipal, width: 'auto', backgroundColor: CORES.roxoEscuro, color: 'white'}}>📄 Exportar PDF</button>
+              </div>
 
-                <div style={{ overflowX: 'auto', backgroundColor: 'white', borderRadius: '5px' }}>
-                  <table style={styles.table}>
-                    <thead>
-                      <tr style={{ backgroundColor: CORES.laranja, color: 'black' }}>
-                        <th style={{ padding: '12px' }}>Data</th>
-                        <th style={{ padding: '12px' }}>Projeto</th>
-                        <th style={{ padding: '12px' }}>Material</th>
-                        <th style={{ padding: '12px' }}>Usuário / Dept.</th>
-                        <th style={{ padding: '12px' }}>Qtd</th>
+              <div style={{ overflowX: 'auto', backgroundColor: 'white', borderRadius: '5px' }}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr style={{ backgroundColor: CORES.laranja, color: 'black' }}>
+                      <th style={{ padding: '12px' }}>Data</th>
+                      <th style={{ padding: '12px' }}>Projeto</th>
+                      <th style={{ padding: '12px' }}>Material</th>
+                      <th style={{ padding: '12px' }}>Usuário / Dept.</th>
+                      <th style={{ padding: '12px' }}>Qtd</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {saidas.length > 0 ? saidas.map((s, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid #eee', textAlign: 'center' }}>
+                        <td style={{ padding: '12px' }}>{s.data ? new Date(s.data).toLocaleDateString('pt-BR') : '-'}</td>
+                        <td style={{ padding: '12px', fontWeight: 'bold', color: CORES.roxoEscuro }}>{s.projeto}</td>
+                        <td style={{ padding: '12px', textAlign: 'left' }}>{obterNomeItem(s.item_id)}</td>
+                        <td style={{ padding: '12px', fontSize: '12px' }}>{s.usuarios?.nome || 'Usuário'} <br/><span style={{color: '#7f8c8d'}}>({s.departamentos?.nome || getNomeDepartamento(s.departamento_id)})</span></td>
+                        <td style={{ padding: '12px', fontWeight: 'bold', color: CORES.vermelho }}>- {s.quantidade}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {saidas.length > 0 ? saidas.map((s, idx) => (
-                        <tr key={idx} style={{ borderBottom: '1px solid #eee', textAlign: 'center' }}>
-                          <td style={{ padding: '12px' }}>{s.data ? new Date(s.data).toLocaleDateString('pt-BR') : '-'}</td>
-                          <td style={{ padding: '12px', fontWeight: 'bold', color: CORES.roxoEscuro }}>{s.projeto}</td>
-                          <td style={{ padding: '12px', textAlign: 'left' }}>{obterNomeItem(s.item_id)}</td>
-                          <td style={{ padding: '12px', fontSize: '12px' }}>{s.usuarios?.nome || 'Usuário'} <br/><span style={{color: '#7f8c8d'}}>({s.departamentos?.nome || getNomeDepartamento(s.departamento_id)})</span></td>
-                          <td style={{ padding: '12px', fontWeight: 'bold', color: CORES.vermelho }}>- {s.quantidade}</td>
-                        </tr>
-                      )) : <tr><td colSpan="5" style={{ padding: '20px', textAlign: 'center' }}>Nenhum registro encontrado.</td></tr>}
-                    </tbody>
-                  </table>
-                </div>
+                    )) : <tr><td colSpan="5" style={{ padding: '20px', textAlign: 'center' }}>Nenhum registro encontrado.</td></tr>}
+                  </tbody>
+                </table>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* 6. TELA DE LOG GLOBAL DE AUDITORIA (Nível 0) */}
-            {view === 'auditoria' && nivelUsuario === 0 && (
-              <div>
-                <h3 style={{ color: CORES.roxoEscuro, marginBottom: '10px' }}>Log Global de Auditoria</h3>
-                <p style={{ color: '#7f8c8d', marginBottom: '20px', fontSize: '14px' }}>Histórico em tempo real de todas as ações executadas no sistema por todos os usuários.</p>
-                <div style={{ overflowX: 'auto', backgroundColor: 'white', borderRadius: '5px' }}>
-                  <table style={styles.table}>
-                    <thead>
-                      <tr style={{ backgroundColor: '#2c3e50', color: 'white' }}>
-                        <th style={{ padding: '12px' }}>Data / Hora</th>
-                        <th style={{ padding: '12px' }}>Usuário</th>
-                        <th style={{ padding: '12px' }}>Departamento</th>
-                        <th style={{ padding: '12px' }}>Ação Executada</th>
+          {/* TELA DE AUDITORIA (LOG) */}
+          {view === 'auditoria' && nivelUsuario <= 1 && (
+            <div>
+              <h3 style={{ color: CORES.roxoEscuro, marginBottom: '10px' }}>
+                Histórico de Atividades {nivelUsuario === 0 ? '(Log Global)' : '(Meu Departamento)'}
+              </h3>
+              <p style={{ color: '#7f8c8d', marginBottom: '20px', fontSize: '14px' }}>Rastreamento de todas as ações executadas no sistema.</p>
+              <div style={{ overflowX: 'auto', backgroundColor: 'white', borderRadius: '5px' }}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#2c3e50', color: 'white' }}>
+                      <th style={{ padding: '12px' }}>Data / Hora</th>
+                      <th style={{ padding: '12px' }}>Usuário</th>
+                      {nivelUsuario === 0 && <th style={{ padding: '12px' }}>Departamento</th>}
+                      <th style={{ padding: '12px' }}>Ação Executada</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditoria.length > 0 ? auditoria.map(a => (
+                      <tr key={a.id} style={{ borderBottom: '1px solid #eee', textAlign: 'center', fontSize: '14px' }}>
+                        <td style={{ padding: '12px' }}>{new Date(a.data).toLocaleString('pt-BR')}</td>
+                        <td style={{ padding: '12px', fontWeight: 'bold' }}>{a.usuario}</td>
+                        {nivelUsuario === 0 && <td style={{ padding: '12px', color: '#7f8c8d' }}>{a.departamento}</td>}
+                        <td style={{ padding: '12px', textAlign: 'left' }}>{a.acao}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {auditoria.length > 0 ? auditoria.map(a => (
-                        <tr key={a.id} style={{ borderBottom: '1px solid #eee', textAlign: 'center', fontSize: '14px' }}>
-                          <td style={{ padding: '12px' }}>{new Date(a.data).toLocaleString('pt-BR')}</td>
-                          <td style={{ padding: '12px', fontWeight: 'bold' }}>{a.usuario}</td>
-                          <td style={{ padding: '12px', color: '#7f8c8d' }}>{a.departamento}</td>
-                          <td style={{ padding: '12px', textAlign: 'left' }}>{a.acao}</td>
-                        </tr>
-                      )) : <tr><td colSpan="4" style={{ padding: '20px', textAlign: 'center' }}>Nenhuma atividade registrada no log.</td></tr>}
-                    </tbody>
-                  </table>
-                </div>
+                    )) : <tr><td colSpan={nivelUsuario === 0 ? 4 : 3} style={{ padding: '20px', textAlign: 'center' }}>Nenhuma atividade registrada no log.</td></tr>}
+                  </tbody>
+                </table>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* 7. GERENCIAMENTO DE USUÁRIOS (Níveis 0 e 1) */}
-            {view === 'configs' && (nivelUsuario === 0 || nivelUsuario === 1) && (
-              <div>
-                <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>
-                  Cadastrar Usuário {nivelUsuario === 0 ? '(Nível Geral)' : '(No Seu Departamento)'}
-                </h3>
-                <div style={styles.formCard}>
-                  <form onSubmit={handleCadastrarUsuario}>
-                    <label>Nome Completo</label>
-                    <input type="text" required style={styles.input} value={novoUsuario.nome} onChange={e => setNovoUsuario({...novoUsuario, nome: e.target.value})} />
-                    
-                    <label>Cargo / Função</label>
-                    <input type="text" placeholder="Ex: Monitor de Robótica" required style={styles.input} value={novoUsuario.cargo} onChange={e => setNovoUsuario({...novoUsuario, cargo: e.target.value})} />
-                    
-                    {nivelUsuario === 0 ? (
-                      <>
-                        <label>Departamento (Digite para criar ou escolher)</label>
-                        <input type="text" required style={styles.input} list="depts-list" value={novoUsuario.departamento_nome} onChange={e => setNovoUsuario({...novoUsuario, departamento_nome: e.target.value})} placeholder="Ex: Mecânica" />
-                        <datalist id="depts-list">{departamentos.map(d => <option key={d.id} value={d.nome} />)}</datalist>
-                      </>
-                    ) : (
-                      <p style={{ fontSize: '14px', color: '#555', backgroundColor: '#eee', padding: '10px', borderRadius: '5px', marginBottom: '15px' }}>
-                        Departamento: <b>{getNomeDepartamento(user.departamento_id)}</b> (Fixo)
-                      </p>
-                    )}
+          {/* GERENCIAMENTO DE USUÁRIOS (Níveis 0 e 1) */}
+          {view === 'configs' && (nivelUsuario === 0 || nivelUsuario === 1) && (
+            <div>
+              <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>
+                Cadastrar Usuário {nivelUsuario === 0 ? '(Nível Geral)' : '(No Seu Departamento)'}
+              </h3>
+              <div style={styles.formCard}>
+                <form onSubmit={handleCadastrarUsuario}>
+                  <label>Nome Completo</label>
+                  <input type="text" required style={styles.input} value={novoUsuario.nome} onChange={e => setNovoUsuario({...novoUsuario, nome: e.target.value})} />
+                  
+                  <label>Cargo / Função</label>
+                  <input type="text" placeholder="Ex: Monitor de Robótica" required style={styles.input} value={novoUsuario.cargo} onChange={e => setNovoUsuario({...novoUsuario, cargo: e.target.value})} />
+                  
+                  {nivelUsuario === 0 ? (
+                    <>
+                      <label>Departamento (Digite para criar ou escolher)</label>
+                      <input type="text" required style={styles.input} list="depts-list" value={novoUsuario.departamento_nome} onChange={e => setNovoUsuario({...novoUsuario, departamento_nome: e.target.value})} placeholder="Ex: Mecânica" />
+                      <datalist id="depts-list">{departamentos.map(d => <option key={d.id} value={d.nome} />)}</datalist>
+                    </>
+                  ) : (
+                    <p style={{ fontSize: '14px', color: '#555', backgroundColor: '#eee', padding: '10px', borderRadius: '5px', marginBottom: '15px' }}>
+                      Departamento: <b>{getNomeDepartamento(user.departamento_id)}</b> (Fixo)
+                    </p>
+                  )}
 
-                    <label>Nível de Acesso</label>
-                    <select style={styles.input} value={novoUsuario.nivel_acesso} onChange={e => setNovoUsuario({...novoUsuario, nivel_acesso: parseInt(e.target.value)})}>
-                      {nivelUsuario === 0 && <option value={0}>Nível 0: Admin Geral (Acesso Total)</option>}
-                      <option value={1}>Nível 1: Responsável pelo Dept.</option>
-                      <option value={2}>Nível 2: Monitor / Operador</option>
-                    </select>
+                  <label>Nível de Acesso</label>
+                  <select style={styles.input} value={novoUsuario.nivel_acesso} onChange={e => setNovoUsuario({...novoUsuario, nivel_acesso: parseInt(e.target.value)})}>
+                    {nivelUsuario === 0 && <option value={0}>Nível 0: Admin Geral (Acesso Total)</option>}
+                    <option value={1}>Nível 1: Responsável pelo Dept.</option>
+                    <option value={2}>Nível 2: Monitor / Operador</option>
+                  </select>
 
-                    <label>Usuário de Login</label>
-                    <input type="text" required style={styles.input} value={novoUsuario.usuario} onChange={e => setNovoUsuario({...novoUsuario, usuario: e.target.value})} />
-                    
-                    <label>Senha Provisória</label>
-                    <input type="password" required style={styles.input} value={novoUsuario.senha} onChange={e => setNovoUsuario({...novoUsuario, senha: e.target.value})} />
-                    
-                    <button type="submit" style={{...styles.btnPrincipal, marginTop: '10px'}}>Cadastrar Usuário</button>
-                  </form>
-                </div>
+                  <label>Usuário de Login</label>
+                  <input type="text" required style={styles.input} value={novoUsuario.usuario} onChange={e => setNovoUsuario({...novoUsuario, usuario: e.target.value})} />
+                  
+                  <label>Senha Provisória</label>
+                  <input type="password" required style={styles.input} value={novoUsuario.senha} onChange={e => setNovoUsuario({...novoUsuario, senha: e.target.value})} />
+                  
+                  <button type="submit" style={{...styles.btnPrincipal, marginTop: '10px'}}>Cadastrar Usuário</button>
+                </form>
               </div>
-            )}
+            </div>
+          )}
 
+        </div>
+      </div>
+
+      {/* MODAL DE EDIÇÃO DE ITEM */}
+      {itemEditando && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.formCard}>
+            <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Editar Material</h3>
+            <form onSubmit={handleSalvarEdicao}>
+              <label>Nome do Item</label>
+              <input type="text" required style={styles.input} value={itemEditando.nome} onChange={e => setItemEditando({...itemEditando, nome: e.target.value})} />
+              
+              <label>Categoria</label>
+              <input type="text" required style={styles.input} list="cat-edit-list" value={itemEditando.categoria} onChange={e => setItemEditando({...itemEditando, categoria: e.target.value})} />
+              <datalist id="cat-edit-list">{categoriasUnicas.map(c => <option key={c} value={c} />)}</datalist>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <div style={{ flex: 1 }}><label>Quantidade</label><input type="number" required min="0" style={styles.input} value={itemEditando.quantidade} onChange={e => setItemEditando({...itemEditando, quantidade: e.target.value})} /></div>
+                <div style={{ flex: 1 }}><label>Alerta Mínimo</label><input type="number" required min="0" style={styles.input} value={itemEditando.quantidade_minima || '0'} onChange={e => setItemEditando({...itemEditando, quantidade_minima: e.target.value})} /></div>
+              </div>
+
+              <label>Localização</label>
+              <input type="text" required style={styles.input} value={itemEditando.localizacao} onChange={e => setItemEditando({...itemEditando, localizacao: e.target.value})} />
+              
+              <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+                <button type="submit" style={styles.btnPrincipal}>Salvar</button>
+                <button type="button" style={{...styles.btnPrincipal, backgroundColor: '#bdc3c7', color: 'black'}} onClick={() => setItemEditando(null)}>Cancelar</button>
+              </div>
+            </form>
           </div>
         </div>
+      )}
 
-        {/* MODAL DE EDIÇÃO DE ITEM */}
-        {itemEditando && (
-          <div style={styles.modalOverlay}>
-            <div style={styles.formCard}>
-              <h3 style={{ color: CORES.roxoEscuro, marginBottom: '20px' }}>Editar Material</h3>
-              <form onSubmit={handleSalvarEdicao}>
-                <label>Nome do Item</label>
-                <input type="text" required style={styles.input} value={itemEditando.nome} onChange={e => setItemEditando({...itemEditando, nome: e.target.value})} />
-                
-                <label>Categoria</label>
-                <input type="text" required style={styles.input} list="cat-edit-list" value={itemEditando.categoria} onChange={e => setItemEditando({...itemEditando, categoria: e.target.value})} />
-                <datalist id="cat-edit-list">{categoriasUnicas.map(c => <option key={c} value={c} />)}</datalist>
-
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <div style={{ flex: 1 }}><label>Quantidade</label><input type="number" required min="0" style={styles.input} value={itemEditando.quantidade} onChange={e => setItemEditando({...itemEditando, quantidade: e.target.value})} /></div>
-                  <div style={{ flex: 1 }}><label>Alerta Mínimo</label><input type="number" required min="0" style={styles.input} value={itemEditando.quantidade_minima || '0'} onChange={e => setItemEditando({...itemEditando, quantidade_minima: e.target.value})} /></div>
-                </div>
-
-                <label>Localização</label>
-                <input type="text" required style={styles.input} value={itemEditando.localizacao} onChange={e => setItemEditando({...itemEditando, localizacao: e.target.value})} />
-                
-                <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
-                  <button type="submit" style={styles.btnPrincipal}>Salvar</button>
-                  <button type="button" style={{...styles.btnPrincipal, backgroundColor: '#bdc3c7', color: 'black'}} onClick={() => setItemEditando(null)}>Cancelar</button>
-                </div>
-              </form>
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
+      {itemParaExcluir && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.formCard, textAlign: 'center', padding: '30px' }}>
+            <h3 style={{ color: CORES.vermelho, marginBottom: '15px', fontSize: '22px' }}>Atenção!</h3>
+            <p style={{ color: '#333', marginBottom: '25px', fontSize: '16px' }}>Excluir o item <strong>{itemParaExcluir.nome}</strong> permanentemente?</p>
+            <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+              <button onClick={confirmarExclusao} style={{ ...styles.btnPrincipal, backgroundColor: CORES.vermelho, color: 'white', width: 'auto', padding: '12px 25px' }}>Sim, Excluir</button>
+              <button onClick={() => setItemParaExcluir(null)} style={{ ...styles.btnPrincipal, backgroundColor: '#bdc3c7', color: 'black', width: 'auto', padding: '12px 25px' }}>Cancelar</button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
-        {itemParaExcluir && (
-          <div style={styles.modalOverlay}>
-            <div style={{ ...styles.formCard, textAlign: 'center', padding: '30px' }}>
-              <h3 style={{ color: CORES.vermelho, marginBottom: '15px', fontSize: '22px' }}>Atenção!</h3>
-              <p style={{ color: '#333', marginBottom: '25px', fontSize: '16px' }}>Excluir o item <strong>{itemParaExcluir.nome}</strong> permanentemente?</p>
-              <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
-                <button onClick={confirmarExclusao} style={{ ...styles.btnPrincipal, backgroundColor: CORES.vermelho, color: 'white', width: 'auto', padding: '12px 25px' }}>Sim, Excluir</button>
-                <button onClick={() => setItemParaExcluir(null)} style={{ ...styles.btnPrincipal, backgroundColor: '#bdc3c7', color: 'black', width: 'auto', padding: '12px 25px' }}>Cancelar</button>
+      {/* MODAL DE SOLICITAÇÃO DE MATERIAL */}
+      {modalSolicitar.visivel && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.formCard}>
+            <h3 style={{color: CORES.roxoEscuro, marginBottom: '20px'}}>Solicitar Material</h3>
+            <p style={{ marginBottom: '15px' }}>Pedindo <b>{modalSolicitar.item.nome}</b> para o <b>{getNomeDepartamento(modalSolicitar.item.departamento_id)}</b></p>
+            <form onSubmit={enviarSolicitacao}>
+              <label>Quantidade a pedir (Máx disponível: {modalSolicitar.item.quantidade})</label>
+              <input type="number" required min="1" max={modalSolicitar.item.quantidade} style={styles.input} value={modalSolicitar.quantidade} onChange={e => setModalSolicitar({...modalSolicitar, quantidade: e.target.value})} />
+              <div style={{display: 'flex', gap: '10px', marginTop: '15px'}}>
+                <button type="submit" style={{...styles.btnPrincipal, background: CORES.verde, color: 'white'}}>Enviar Pedido</button>
+                <button type="button" onClick={() => setModalSolicitar({visivel: false, item: null, quantidade: 1})} style={{...styles.btnPrincipal, background: '#bdc3c7'}}>Cancelar</button>
               </div>
-            </div>
+            </form>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* MODAL DE SOLICITAÇÃO DE MATERIAL */}
-        {modalSolicitar.visivel && (
-          <div style={styles.modalOverlay}>
-            <div style={styles.formCard}>
-              <h3 style={{color: CORES.roxoEscuro, marginBottom: '20px'}}>Solicitar Material</h3>
-              <p style={{ marginBottom: '15px' }}>Pedindo <b>{modalSolicitar.item.nome}</b> para o <b>{getNomeDepartamento(modalSolicitar.item.departamento_id)}</b></p>
-              <form onSubmit={enviarSolicitacao}>
-                <label>Quantidade a pedir (Máx disponível: {modalSolicitar.item.quantidade})</label>
-                <input type="number" required min="1" max={modalSolicitar.item.quantidade} style={styles.input} value={modalSolicitar.quantidade} onChange={e => setModalSolicitar({...modalSolicitar, quantidade: e.target.value})} />
-                <div style={{display: 'flex', gap: '10px', marginTop: '15px'}}>
-                  <button type="submit" style={{...styles.btnPrincipal, background: CORES.verde, color: 'white'}}>Enviar Pedido</button>
-                  <button type="button" onClick={() => setModalSolicitar({visivel: false, item: null, quantidade: 1})} style={{...styles.btnPrincipal, background: '#bdc3c7'}}>Cancelar</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-      </div>
-    </>
+    </div>
   );
 }
 
