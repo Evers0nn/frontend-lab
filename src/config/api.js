@@ -26,3 +26,5 @@ export async function apiFetch(path, options = {}, token) {
 
   return data;
 }
+
+export const getAuthHeaders = (token) => ({ "Content-Type": "application/json", Authorization: `Bearer ${token}` });
