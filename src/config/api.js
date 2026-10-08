@@ -5,6 +5,12 @@ export const jsonHeaders = (token) => ({
   Authorization: `Bearer ${token}`,
 });
 
+// Compatibilidade com os arquivos antigos do projeto
+export const getAuthHeaders = (token) => ({
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${token}`,
+});
+
 export async function apiFetch(path, options = {}, token) {
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
@@ -15,16 +21,24 @@ export async function apiFetch(path, options = {}, token) {
   });
 
   let data = null;
+
   const contentType = response.headers.get("content-type") || "";
-  if (contentType.includes("application/json")) data = await response.json();
+
+  if (contentType.includes("application/json")) {
+    data = await response.json();
+  }
 
   if (!response.ok) {
-    const error = new Error(data?.detail || data?.mensagem || "Erro na comunicação com o servidor.");
+    const error = new Error(
+      data?.detail ||
+        data?.mensagem ||
+        "Erro na comunicação com o servidor."
+    );
+
     error.status = response.status;
+
     throw error;
   }
 
   return data;
 }
-
-export const getAuthHeaders = (token) => ({ "Content-Type": "application/json", Authorization: `Bearer ${token}` });
