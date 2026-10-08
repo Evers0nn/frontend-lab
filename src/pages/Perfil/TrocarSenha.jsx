@@ -1,3 +1,10 @@
 import React from "react";
-import { useSystem } from "../../context/SystemContext";
-export default function TrocarSenha(){const {formSenha,setFormSenha,handleTrocarSenha}=useSystem();return <section className="page-section"><div className="page-heading"><div><span className="eyebrow">CONTA</span><h2>Trocar Senha</h2><p>Atualize sua senha de acesso ao sistema.</p></div></div><div className="form-card"><form className="form-stack" onSubmit={handleTrocarSenha}><label>Senha atual<input type="password" required value={formSenha.atual} onChange={e=>setFormSenha({...formSenha,atual:e.target.value})}/></label><label>Nova senha<input type="password" required value={formSenha.nova} onChange={e=>setFormSenha({...formSenha,nova:e.target.value})}/></label><label>Confirmar nova senha<input type="password" required value={formSenha.confirmacao} onChange={e=>setFormSenha({...formSenha,confirmacao:e.target.value})}/></label><button className="btn btn-primary">Atualizar senha</button></form></div></section>}
+
+export default function TrocarSenha() {
+  return (
+    <div className="card">
+      <h2>Trocar Senha</h2>
+      <p>Tela em migração.</p>
+    </div>
+  );
+}
