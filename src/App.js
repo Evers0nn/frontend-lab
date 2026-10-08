@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import "./index.css";
-
 import { AuthProvider, useAuth } from "./context/AuthContext";
-
+import { SystemProvider } from "./context/SystemContext";
+import Layout from "./components/layout/Layout";
 import Login from "./pages/Login/Login";
 import Estoque from "./pages/Estoque/Estoque";
 import Solicitacoes from "./pages/Solicitacoes/Solicitacoes";
@@ -13,62 +13,5 @@ import Auditoria from "./pages/Auditoria/Auditoria";
 import Usuarios from "./pages/Usuarios/Usuarios";
 import TrocarSenha from "./pages/Perfil/TrocarSenha";
 
-import Layout from "./components/layout/Layout";
-
-function Sistema() {
-  const { user } = useAuth();
-
-  const [view, setView] = useState("estoque");
-
-  if (!user) {
-    return <Login />;
-  }
-
-  const renderPage = () => {
-    switch (view) {
-      case "estoque":
-        return <Estoque />;
-
-      case "solicitacoes":
-        return <Solicitacoes />;
-
-      case "gerenciar":
-        return <NovoMaterial />;
-
-      case "nova_saida":
-        return <RegistrarSaida />;
-
-      case "projetos_graficos":
-        return <Projetos />;
-
-      case "auditoria":
-        return <Auditoria />;
-
-      case "configs":
-        return <Usuarios />;
-
-      case "mudar_senha":
-        return <TrocarSenha />;
-
-      default:
-        return <Estoque />;
-    }
-  };
-
-  return (
-    <Layout
-      view={view}
-      mudarView={setView}
-    >
-      {renderPage()}
-    </Layout>
-  );
-}
-
-export default function App() {
-  return (
-    <AuthProvider>
-      <Sistema />
-    </AuthProvider>
-  );
-}
+function Sistema(){const {user}=useAuth();const [view,setView]=useState("estoque");if(!user)return <Login/>;const pages={estoque:<Estoque/>,solicitacoes:<Solicitacoes/>,gerenciar:<NovoMaterial/>,nova_saida:<RegistrarSaida/>,projetos_graficos:<Projetos/>,auditoria:<Auditoria/>,configs:<Usuarios/>,mudar_senha:<TrocarSenha/>};return <Layout view={view} onNavigate={setView}>{pages[view]||pages.estoque}</Layout>}
+export default function App(){return <AuthProvider><SystemProvider><Sistema/></SystemProvider></AuthProvider>}

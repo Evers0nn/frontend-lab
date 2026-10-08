@@ -1,57 +1,5 @@
 import React, { useState } from "react";
-
 import Sidebar from "./Sidebar";
 import Header from "./Header";
-
-export default function Layout({
-  children,
-  view,
-  mudarView,
-}) {
-  const [menuAberto, setMenuAberto] =
-    useState(false);
-
-  const titulos = {
-    estoque: "Estoque Geral",
-    solicitacoes: "Solicitações",
-    gerenciar: "Novo Material",
-    nova_saida: "Registrar Saída",
-    projetos_graficos: "Dashboard de Projetos",
-    auditoria: "Auditoria",
-    configs: "Controle de Usuários",
-    mudar_senha: "Segurança",
-  };
-
-  return (
-    <div className="app-layout">
-
-      <Sidebar
-        view={view}
-        mudarView={mudarView}
-        aberto={menuAberto}
-        fecharMenu={() =>
-          setMenuAberto(false)
-        }
-      />
-
-      <main className="main-area">
-
-        <Header
-          abrirMenu={() =>
-            setMenuAberto(true)
-          }
-          titulo={
-            titulos[view] ||
-            "Controle de Materiais"
-          }
-        />
-
-        <section className="content-area">
-          {children}
-        </section>
-
-      </main>
-
-    </div>
-  );
-}
+import Notification from "../ui/Notification";
+export default function Layout({view,onNavigate,children}){const [mobileOpen,setMobileOpen]=useState(false);return <div className="app-shell"><Notification/><Sidebar view={view} onNavigate={onNavigate} mobileOpen={mobileOpen} onClose={()=>setMobileOpen(false)}/><div className="main-shell"><Header view={view} onMenu={()=>setMobileOpen(true)}/><main className="content">{children}</main></div></div>}

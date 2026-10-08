@@ -1,117 +1,31 @@
 import React, { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
-
-const CORES = {
-  roxoEscuro: "#574591",
-  roxoMedio: "#766AA7",
-  roxoClaro: "#CEC9DD",
-  laranja: "#F4A521",
-  branco: "#FFFFFF",
-};
+import { useSystem } from "../../context/SystemContext";
 
 export default function Login() {
   const { login } = useAuth();
+  const { mostrarNotificacao } = useSystem();
+  const [form, setForm] = useState({ usuario: "", senha: "" });
+  const [loading, setLoading] = useState(false);
 
-  const [form, setForm] = useState({
-    usuario: "",
-    senha: "",
-  });
+  async function submit(e) {
+    e.preventDefault(); setLoading(true);
+    try { const logged = await login(form.usuario, form.senha); mostrarNotificacao(`Bem-vindo(a), ${logged.nome}!`); }
+    catch (error) { mostrarNotificacao(error.message, "erro"); }
+    finally { setLoading(false); }
+  }
 
-  const [erro, setErro] = useState("");
-  const [carregando, setCarregando] = useState(false);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    setErro("");
-    setCarregando(true);
-
-    try {
-      await login(form.usuario, form.senha);
-    } catch (error) {
-      setErro(error.message);
-    } finally {
-      setCarregando(false);
-    }
-  };
-
-  return (
-    <div className="login-page">
-
-      <div className="login-background" />
-
-      <div className="login-card">
-
-        <div className="login-logo">
-          <img
-            src="/logo-territorio.png"
-            alt="Território do Fazer"
-          />
-        </div>
-
-        <h1>Acesso ao Sistema</h1>
-
-        <p>
-          Controle de Materiais
-        </p>
-
-        <form onSubmit={handleSubmit}>
-
-          <div className="form-group">
-            <label>Usuário</label>
-
-            <input
-              type="text"
-              value={form.usuario}
-              placeholder="Digite seu usuário"
-              required
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  usuario: e.target.value,
-                })
-              }
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Senha</label>
-
-            <input
-              type="password"
-              value={form.senha}
-              placeholder="Digite sua senha"
-              required
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  senha: e.target.value,
-                })
-              }
-            />
-          </div>
-
-          {erro && (
-            <div className="login-error">
-              {erro}
-            </div>
-          )}
-
-          <button
-            className="btn btn-primary login-button"
-            type="submit"
-            disabled={carregando}
-          >
-            {carregando ? "ENTRANDO..." : "ENTRAR"}
-          </button>
-
-        </form>
-
-        <div className="login-footer">
-          Território do Fazer
-        </div>
-
-      </div>
-    </div>
-  );
+  return <main className="login-page">
+    <section className="login-card">
+      <img src="/logo-territorio.png" alt="Território do Fazer" className="login-logo" />
+      <span className="eyebrow">GESTÃO INTERNA</span>
+      <h1>Acesso ao Sistema</h1>
+      <p>Controle de materiais e movimentações</p>
+      <form onSubmit={submit} className="form-stack">
+        <label>Usuário<input required value={form.usuario} onChange={e => setForm({ ...form, usuario: e.target.value })} placeholder="Seu usuário" /></label>
+        <label>Senha<input required type="password" value={form.senha} onChange={e => setForm({ ...form, senha: e.target.value })} placeholder="Sua senha" /></label>
+        <button className="btn btn-primary" disabled={loading}>{loading ? "Entrando..." : "Entrar no sistema"}</button>
+      </form>
+    </section>
+  </main>;
 }
