@@ -1,3 +1,10 @@
-import React, { useMemo } from "react";
-import { useSystem } from "../../context/SystemContext";
-export default function RegistrarSaida(){const {novaSaida,setNovaSaida,handleCadastrarSaida,itens,saidas,user,nivelUsuario}=useSystem();const projetos=useMemo(()=>[...new Set(saidas.map(s=>s.projeto).filter(Boolean))],[saidas]);const disponiveis=itens.filter(i=>i.quantidade>0&&(i.departamento_id===user.departamento_id||nivelUsuario===0));return <section className="page-section"><div className="page-heading"><div><span className="eyebrow">MOVIMENTAÇÃO</span><h2>Registrar Saída</h2><p>Retire materiais do estoque do seu departamento.</p></div></div><div className="form-card"><form className="form-stack" onSubmit={handleCadastrarSaida}><label>Material<select required value={novaSaida.item_id} onChange={e=>setNovaSaida({...novaSaida,item_id:e.target.value})}><option value="">Escolha um item</option>{disponiveis.map(i=><option key={i.id} value={i.id}>{i.nome} — disponível: {i.quantidade}</option>)}</select></label><label>Quantidade<input type="number" min="1" required value={novaSaida.quantidade} onChange={e=>setNovaSaida({...novaSaida,quantidade:e.target.value})}/></label><label>Projeto / destino<input required list="projetos" placeholder="Ex.: Robô Seguidor de Linha" value={novaSaida.projeto} onChange={e=>setNovaSaida({...novaSaida,projeto:e.target.value})}/><datalist id="projetos">{projetos.map(p=><option key={p} value={p}/>)}</datalist></label><button className="btn btn-primary">Confirmar saída</button></form></div></section>}
+import React from "react";
+
+export default function RegistrarSaida() {
+  return (
+    <div className="card">
+      <h2>Registrar Saída</h2>
+      <p>Tela em migração.</p>
+    </div>
+  );
+}

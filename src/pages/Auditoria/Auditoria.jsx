@@ -1,3 +1,10 @@
 import React from "react";
-import { useSystem } from "../../context/SystemContext";
-export default function Auditoria(){const {auditoria,nivelUsuario}=useSystem();return <section className="page-section"><div className="page-heading"><div><span className="eyebrow">SEGURANÇA</span><h2>Log de Auditoria</h2><p>{nivelUsuario===0?"Histórico global de atividades.":"Histórico de atividades do seu departamento."}</p></div></div><div className="table-card"><div className="table-scroll"><table><thead><tr><th>Data / Hora</th><th>Usuário</th>{nivelUsuario===0&&<th>Departamento</th>}<th>Ação executada</th></tr></thead><tbody>{auditoria.length?auditoria.map(a=><tr key={a.id}><td>{a.data?new Date(a.data).toLocaleString("pt-BR"):"—"}</td><td className="strong">{a.usuario}</td>{nivelUsuario===0&&<td>{a.departamento}</td>}<td>{a.acao}</td></tr>):<tr><td colSpan={nivelUsuario===0?4:3} className="empty-state">Nenhuma atividade registrada.</td></tr>}</tbody></table></div></div></section>}
+
+export default function Auditoria() {
+  return (
+    <div className="card">
+      <h2>Auditoria</h2>
+      <p>Tela em migração.</p>
+    </div>
+  );
+}
