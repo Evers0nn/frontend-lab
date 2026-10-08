@@ -1,9 +1,10 @@
 import React from "react";
-import { useSystem } from "../../context/SystemContext";
-import StatusBadge from "../../components/ui/StatusBadge";
 
 export default function Solicitacoes() {
-  const { solicitacoes, user, nivelUsuario, getNomeDepartamento, getNomeUsuario, itens, responderSolicitacao } = useSystem();
-  const nomeItem = id => itens.find(i=>i.id===id)?.nome || `Item ID ${id}`;
-  return <section className="page-section"><div className="page-heading"><div><span className="eyebrow">TRANSFERÊNCIAS</span><h2>Solicitações</h2><p>Pedidos de material entre departamentos.</p></div></div><div className="table-card"><div className="table-scroll"><table><thead><tr><th>Material</th><th>Quem pediu</th><th>Origem</th><th>Destino</th><th>Qtd.</th><th>Observação</th><th>Status</th><th>Ações</th></tr></thead><tbody>{solicitacoes.length ? solicitacoes.map(s=>{const recebida=s.dept_solicitado_id===user.departamento_id;const podeAprovar=(nivelUsuario===0||(nivelUsuario===1&&recebida))&&s.status==="pendente";return <tr key={s.id}><td className="strong">{nomeItem(s.item_id)}</td><td>{getNomeUsuario(s.usuario_solicitante_id)}</td><td>{getNomeDepartamento(s.dept_solicitado_id)}</td><td>{getNomeDepartamento(s.dept_solicitante_id)}</td><td>{s.quantidade}</td><td className="muted">{s.observacao||"—"}</td><td><StatusBadge status={s.status}/>{s.status!=="pendente"&&s.usuario_respondedor_id&&<small>Por: {getNomeUsuario(s.usuario_respondedor_id)}</small>}</td><td>{podeAprovar?<div className="action-row"><button className="btn btn-small btn-success" onClick={()=>responderSolicitacao(s.id,"aprovado")}>Aprovar</button><button className="btn btn-small btn-danger" onClick={()=>responderSolicitacao(s.id,"rejeitado")}>Rejeitar</button></div>:<span className="muted">{s.status!=="pendente"?"Finalizado":"Aguardando"}</span>}</td></tr>}) : <tr><td colSpan="8" className="empty-state">Nenhuma solicitação encontrada.</td></tr>}</tbody></table></div></div></section>;
+  return (
+    <div className="card">
+      <h2>Solicitações</h2>
+      <p>Tela em migração.</p>
+    </div>
+  );
 }
